@@ -1,7 +1,7 @@
 import Nylas from "nylas";
 import { config } from "../config";
 import type { NylasClient } from "./client";
-import type { AuthUrlParams } from "./types";
+import type { AuthUrlParams, CodeExchangeResult } from "./types";
 
 export function createNylasClient(): NylasClient {
   const nylas = new Nylas({
@@ -17,6 +17,16 @@ export function createNylasClient(): NylasClient {
         state,
         loginHint,
       });
+    },
+
+    async exchangeCode(code: string): Promise<CodeExchangeResult> {
+      const response = await nylas.auth.exchangeCodeForToken({
+        clientId: config.NYLAS_CLIENT_ID,
+        clientSecret: config.NYLAS_API_KEY,
+        redirectUri: config.CALLBACK_URL,
+        code,
+      });
+      return { grantId: response.grantId, email: response.email };
     },
   };
 }
