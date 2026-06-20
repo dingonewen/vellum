@@ -8,8 +8,7 @@ const envSchema = z.object({
 
   NYLAS_API_KEY: z.string().min(1),
   NYLAS_CLIENT_ID: z.string().min(1),
-  NYLAS_CLIENT_SECRET: z.string().min(1),
-  NYLAS_WEBHOOK_SECRET: z.string().min(1),
+  NYLAS_WEBHOOK_SECRET: z.string().default(""),
   NYLAS_API_URI: z.string().url().default("https://api.us.nylas.com"),
 
   ANTHROPIC_API_KEY: z.string().min(1),
