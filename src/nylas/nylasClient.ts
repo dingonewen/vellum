@@ -1,7 +1,13 @@
 import Nylas from "nylas";
 import { config } from "../config";
 import type { NylasClient } from "./client";
-import type { AuthUrlParams, CodeExchangeResult } from "./types";
+import type {
+  AuthUrlParams,
+  CodeExchangeResult,
+  EmailMessage,
+  ListMessagesParams,
+  MessagePage,
+} from "./types";
 
 export function createNylasClient(): NylasClient {
   const nylas = new Nylas({
@@ -27,6 +33,35 @@ export function createNylasClient(): NylasClient {
         code,
       });
       return { grantId: response.grantId, email: response.email };
+    },
+
+    async listMessages(
+      grantId: string,
+      { sinceTimestamp, limit, pageToken }: ListMessagesParams
+    ): Promise<MessagePage> {
+      const response = await nylas.messages.list({
+        identifier: grantId,
+        queryParams: {
+          receivedAfter: sinceTimestamp,
+          limit,
+          pageToken,
+          in: "INBOX",
+        },
+      });
+
+      const messages: EmailMessage[] = response.data.map((msg) => {
+        const from = msg.from?.[0];
+        return {
+          id: msg.id,
+          subject: msg.subject ?? "(no subject)",
+          sender: { name: from?.name, email: from?.email ?? "" },
+          snippet: msg.snippet ?? "",
+          receivedAt: msg.date,
+          isRead: !(msg.unread ?? true),
+        };
+      });
+
+      return { messages, nextCursor: response.nextCursor ?? undefined };
     },
   };
 }
