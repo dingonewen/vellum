@@ -63,5 +63,22 @@ export function createNylasClient(): NylasClient {
 
       return { messages, nextCursor: response.nextCursor ?? undefined };
     },
+
+    async getMessage(grantId: string, messageId: string): Promise<EmailMessage> {
+      const response = await nylas.messages.find({
+        identifier: grantId,
+        messageId,
+      });
+      const msg = response.data;
+      const from = msg.from?.[0];
+      return {
+        id: msg.id,
+        subject: msg.subject ?? "(no subject)",
+        sender: { name: from?.name, email: from?.email ?? "" },
+        snippet: msg.snippet ?? "",
+        receivedAt: msg.date,
+        isRead: !(msg.unread ?? true),
+      };
+    },
   };
 }

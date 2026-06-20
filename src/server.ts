@@ -3,6 +3,9 @@ import { config } from "./config";
 import { db } from "./db";
 import { authRouter } from "./routes/auth";
 import { webhookRouter } from "./routes/webhooks";
+import { startWebhookProcessor } from "./webhook/processor";
+import { nylasClient } from "./nylas/instance";
+import { createMessageStore } from "./stores/messageStore";
 
 const app = express();
 
@@ -22,6 +25,8 @@ app.listen(config.PORT, () => {
   console.log(`Server listening on port ${config.PORT}`);
   console.log(`Base URL: ${config.APP_BASE_URL}`);
   console.log(`Database: ${config.DATABASE_PATH} (${db.name})`);
+  startWebhookProcessor(createMessageStore(db), nylasClient);
+  console.log("Webhook processor started");
 });
 
 export { app };
