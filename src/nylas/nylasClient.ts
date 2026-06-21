@@ -80,5 +80,21 @@ export function createNylasClient(): NylasClient {
         isRead: !(msg.unread ?? true),
       };
     },
+
+    async sendMessage(
+      grantId: string,
+      to: string,
+      subject: string,
+      htmlBody: string
+    ): Promise<void> {
+      await nylas.messages.send({
+        identifier: grantId,
+        requestBody: {
+          to: [{ email: to }],
+          subject,
+          body: htmlBody,
+        },
+      });
+    },
   };
 }
