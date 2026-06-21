@@ -121,9 +121,13 @@ Set `APP_BASE_URL` and `CALLBACK_URL` to use the `sslip.io` hostname.
 
 ### 1. Connect a mailbox
 
-Visit `https://your-domain/auth/connect` in a browser. This redirects to Nylas hosted OAuth where the user picks their email provider. After authorizing, Nylas redirects to `/auth/callback` which exchanges the code for a `grantId` and persists it in SQLite.
+Open `https://your-domain` in a browser. Click **Connect Gmail** — this redirects to Nylas hosted OAuth. After authorizing, Nylas redirects back to the app, which exchanges the code for a `grantId`, persists it in SQLite, and returns you to the setup page with the email pre-filled.
 
 ### 2. Configure your digest cadence
+
+On the same page, fill in the destination email and pick a cadence from the dropdown (every minute / hourly / daily / weekly), then click **Save & Schedule**.
+
+Alternatively, via API:
 
 ```bash
 curl -X POST https://your-domain/config \
@@ -209,9 +213,9 @@ All external calls (Nylas API, Anthropic API) are behind TypeScript interfaces (
 ## What I'd Do With More Time
 
 - **Unit tests** for `assemblePrompt`, `parseResponse`, `ScheduleStore.claimDue`, and `MessageStore.upsertMessage` using `initDb(":memory:")` fixtures
-- **Web UI** — a minimal HTML page for connecting the mailbox and configuring cadence, instead of raw curl commands
 - **Webhook retry handling** — currently a failed message fetch leaves the claim set until the 1-hour stale-claim TTL releases it; exponential backoff with a retry counter would be better
 - **Multi-grant scheduler iteration** — `claimDue()` claims one schedule per minute; with many users, a batch claim would be more efficient
 - **OAuth state persistence** — store nonces in SQLite rather than an in-memory Map so they survive restarts
 - **Rate limiting** on the webhook endpoint to mitigate replay attacks beyond HMAC verification
 - **PM2 ecosystem file** for consistent environment configuration instead of relying on `.env` being present on the VM
+- **BYOK (bring your own key)** — allow users to supply their own Anthropic API key via the UI so the service can be hosted without the operator absorbing per-token costs
