@@ -45,7 +45,6 @@ export function createNylasClient(): NylasClient {
           receivedAfter: sinceTimestamp,
           limit,
           pageToken,
-          in: ["INBOX"],
         },
       });
 
