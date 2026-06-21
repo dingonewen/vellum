@@ -53,7 +53,7 @@ authRouter.get("/callback", async (req, res) => {
     const { grantId, email } = await nylasClient.exchangeCode(code);
     grantStore.upsert(grantId, email);
     console.log(`Grant connected: ${email}`);
-    res.send(`<p>Connected <strong>${email}</strong>. You can close this tab.</p>`);
+    res.redirect(`/?connected=true&email=${encodeURIComponent(email)}`);
   } catch (err) {
     console.error("Code exchange failed:", err instanceof Error ? err.message : String(err));
     res.status(502).send("Failed to complete mailbox connection. Please try again.");

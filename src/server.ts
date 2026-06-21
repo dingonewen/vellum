@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import { config } from "./config";
 import { db } from "./db";
 import { authRouter } from "./routes/auth";
@@ -16,8 +17,8 @@ import { createJobRunner } from "./orchestrator/jobRunner";
 
 const app = express();
 
-// Webhook route must receive the raw body buffer for HMAC verification (M6).
-// express.raw() must be mounted before express.json() or the stream is consumed.
+app.use(express.static(path.join(__dirname, "../public")));
+
 app.use("/webhooks", express.raw({ type: "application/json" }));
 app.use(express.json());
 
