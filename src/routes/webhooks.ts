@@ -72,6 +72,7 @@ webhookRouter.post("/nylas", (req, res) => {
   const result = notificationSchema.safeParse(parsed);
   if (!result.success) {
     console.error("Unexpected webhook payload shape:", result.error.flatten());
+    console.error("Raw payload:", JSON.stringify(parsed));
     return;
   }
 
