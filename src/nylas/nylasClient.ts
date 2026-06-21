@@ -44,7 +44,7 @@ export function createNylasClient(): NylasClient {
         queryParams: {
           receivedAfter: sinceTimestamp,
           limit,
-          pageToken,
+          ...(pageToken !== undefined ? { pageToken } : {}),
         },
       });
 
