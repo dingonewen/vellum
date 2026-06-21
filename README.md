@@ -46,6 +46,12 @@ cp .env.example .env
 # fill in .env with your keys
 ```
 
+> **Note (Ubuntu / Node 20+):** `better-sqlite3` is a native module. If `npm install` fails with an ABI mismatch error, rebuild it from source:
+> ```bash
+> sudo apt-get install -y build-essential python3
+> npm install better-sqlite3 --build-from-source
+> ```
+
 ### Environment Variables
 
 | Variable | Description |
