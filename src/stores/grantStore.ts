@@ -9,6 +9,7 @@ export interface Grant {
 export interface GrantStore {
   upsert(grantId: string, email: string): void;
   findAll(): Grant[];
+  findByEmail(email: string): Grant | null;
 }
 
 export function createGrantStore(db: Db): GrantStore {
@@ -28,6 +29,17 @@ export function createGrantStore(db: Db): GrantStore {
            FROM grants`
         )
         .all() as Grant[];
+    },
+
+    findByEmail(email: string): Grant | null {
+      return (
+        (db
+          .prepare(
+            `SELECT grant_id AS grantId, email, created_at AS createdAt
+             FROM grants WHERE email = ?`
+          )
+          .get(email) as Grant | undefined) ?? null
+      );
     },
   };
 }
