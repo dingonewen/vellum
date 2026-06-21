@@ -12,8 +12,10 @@ const messageStore = createMessageStore(db);
 const notificationSchema = z.object({
   type: z.string(),
   data: z.object({
-    grant_id: z.string(),
-    object: z.object({ id: z.string() }),
+    object: z.object({
+      id: z.string(),
+      grant_id: z.string(),
+    }),
   }),
 });
 
@@ -72,10 +74,9 @@ webhookRouter.post("/nylas", (req, res) => {
   const result = notificationSchema.safeParse(parsed);
   if (!result.success) {
     console.error("Unexpected webhook payload shape:", result.error.flatten());
-    console.error("Raw payload:", JSON.stringify(parsed));
     return;
   }
 
-  const { grant_id: grantId, object: { id: messageId } } = result.data.data;
+  const { grant_id: grantId, id: messageId } = result.data.data.object;
   messageStore.enqueue(messageId, grantId);
 });
