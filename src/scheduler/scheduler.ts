@@ -25,7 +25,7 @@ export function startScheduler(store: ScheduleStore, runJob: JobRunner): void {
     } catch (err) {
       console.error(
         `Scheduler job failed for grant ${schedule.grantId}:`,
-        err instanceof Error ? err.message : String(err)
+        JSON.stringify(err, Object.getOwnPropertyNames(err))
       );
       store.releaseClaim(schedule.grantId);
     }
