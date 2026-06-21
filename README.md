@@ -2,6 +2,10 @@
 
 An AI inbox digest service. Connects to your mailbox via Nylas, watches for incoming email via webhook, and periodically emails you an AI-written summary so you can skip the firehose.
 
+**Demo:** https://youtu.be/iU5g4-ytwSI
+
+![Demo](public/demo.gif)
+
 ---
 
 ## Architecture
@@ -9,9 +13,10 @@ An AI inbox digest service. Connects to your mailbox via Nylas, watches for inco
 A single Express + TypeScript server with SQLite for persistence and node-cron for scheduling. No separate services or queues required — the DB is the source of truth for everything durable.
 
 ```
-Browser → /auth/connect → Nylas hosted OAuth → /auth/callback → grantId stored in SQLite
+Browser → GET /           → Web UI (connect mailbox + configure cadence)
+Browser → /auth/connect   → Nylas hosted OAuth → /auth/callback → grantId stored in SQLite
 Nylas   → POST /webhooks/nylas → HMAC verified → messageId enqueued → async processor fetches + stores
-node-cron (every 1 min) → claimDue() → InboxReader → Summarizer → EmailSender → digest email sent
+node-cron (every 1 min)   → claimDue() → InboxReader → Summarizer → EmailSender → digest email sent
 ```
 
 ---
@@ -60,8 +65,8 @@ cp .env.example .env
 | `NYLAS_CLIENT_ID` | Nylas OAuth client ID |
 | `NYLAS_WEBHOOK_SECRET` | Signing secret from Nylas webhook settings (optional at startup, required for webhook delivery) |
 | `NYLAS_API_URI` | Nylas API base URL (default: `https://api.us.nylas.com`) |
-| `APP_BASE_URL` | Public base URL of this server |
-| `CALLBACK_URL` | OAuth callback URL (must be registered in Nylas Dashboard) |
+| `APP_BASE_URL` | Public base URL of this server (e.g. `https://your-ip.sslip.io`) |
+| `CALLBACK_URL` | Full OAuth callback URL — must match what's registered in Nylas Dashboard |
 | `PORT` | HTTP port (default: `3000`) |
 | `ANTHROPIC_API_KEY` | Anthropic API key for AI summarization |
 | `ANTHROPIC_MODEL` | Claude model to use (default: `claude-haiku-4-5-20251001`) |
@@ -103,7 +108,7 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --d
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install -y caddy
 
-# Configure (replace IP dashes to match your VM)
+# Configure (replace IP dashes to match your VM's public IP)
 sudo tee /etc/caddy/Caddyfile > /dev/null <<'EOF'
 YOUR-IP-WITH-DASHES.sslip.io {
     reverse_proxy localhost:3000
@@ -113,7 +118,7 @@ EOF
 sudo systemctl restart caddy
 ```
 
-Set `APP_BASE_URL` and `CALLBACK_URL` to use the `sslip.io` hostname.
+Set `APP_BASE_URL=https://YOUR-IP-WITH-DASHES.sslip.io` and `CALLBACK_URL=https://YOUR-IP-WITH-DASHES.sslip.io/auth/callback` in your `.env`.
 
 ---
 
@@ -121,11 +126,18 @@ Set `APP_BASE_URL` and `CALLBACK_URL` to use the `sslip.io` hostname.
 
 ### 1. Connect a mailbox
 
-Open `https://your-domain` in a browser. Click **Connect Gmail** — this redirects to Nylas hosted OAuth. After authorizing, Nylas redirects back to the app, which exchanges the code for a `grantId`, persists it in SQLite, and returns you to the setup page with the email pre-filled.
+Open `https://your-domain` in a browser. The web UI loads with a two-step setup form.
+
+Click **Connect Gmail** — this redirects to Nylas hosted OAuth. After authorizing, Nylas redirects back to the app, which exchanges the code for a `grantId`, persists it in SQLite, and returns you to the setup page with the connected email pre-filled.
+
+Unhappy paths handled:
+- User denies consent → redirected back with an error message
+- State nonce expired or missing → rejected with 400
+- Code exchange fails → 502 with message
 
 ### 2. Configure your digest cadence
 
-On the same page, fill in the destination email and pick a cadence from the dropdown (every minute / hourly / daily / weekly), then click **Save & Schedule**.
+On the same page, fill in the destination email and pick a cadence from the dropdown, then click **Save & Schedule**. The page shows the next scheduled fire time on success.
 
 Alternatively, via API:
 
@@ -143,6 +155,7 @@ curl -X POST https://your-domain/config \
 - `* * * * *` — every minute (for testing)
 - `0 * * * *` — hourly
 - `0 8 * * *` — daily at 8am UTC
+- `0 8 * * 1` — weekly on Monday at 8am UTC
 
 ### 3. Incoming mail is collected via webhook
 
@@ -151,17 +164,17 @@ When a new email arrives, Nylas POSTs to `/webhooks/nylas`. The handler:
 2. Returns 200 immediately
 3. Enqueues the `messageId` into `pending_messages`
 
-A background processor polls every 5 seconds, claims a batch atomically, refetches each full message from Nylas, and upserts it into the `messages` table (`INSERT OR IGNORE` for deduplication).
+A background processor polls every 5 seconds, claims a batch atomically, refetches each full message from Nylas (never trusts truncated webhook payloads), and upserts it into the `messages` table (`INSERT OR IGNORE` for deduplication).
 
 ### 4. Scheduled digest is sent
 
-Every minute, node-cron fires and calls `claimDue()` — an atomic SQLite transaction that finds a due schedule and claims it. The job runner:
+node-cron fires every minute and calls `claimDue()` — an atomic SQLite transaction that finds a due schedule and claims it. The job runner:
 1. Fetches messages since `last_summary_at` via the Nylas API (paginated, max 200)
 2. Passes them to the AI summarizer (Anthropic Claude)
-3. Sends the HTML digest via Nylas to the destination address
+3. Sends the styled HTML digest via Nylas to the destination address
 4. Updates `last_summary_at` and computes the next fire time
 
-If there are no new messages, the digest is skipped (no empty emails sent).
+If there are no new messages, the digest is skipped — no empty emails sent.
 
 ---
 
@@ -179,7 +192,7 @@ If there are no new messages, the digest is skipped (no empty emails sent).
 | Per-user | One row per `grantId` in `schedules` table |
 | Fires once | `UPDATE schedules SET claimed_at = ? WHERE claimed_at IS NULL AND next_fire_at <= ?` — only the process that wins the UPDATE proceeds |
 
-**Tradeoff:** SQLite's single-writer model means this scales to one process. For multi-instance deployments, PostgreSQL with `SELECT FOR UPDATE SKIP LOCKED` would be the upgrade path. For this single-VM challenge, SQLite is the right fit — zero setup, ACID guarantees, and the atomic UPDATE pattern gives the fires-once guarantee without a separate lock service.
+**Tradeoff:** SQLite's single-writer model means this scales to one process. For multi-instance deployments, PostgreSQL with `SELECT FOR UPDATE SKIP LOCKED` would be the upgrade path. For this single-VM deployment, SQLite is the right fit — zero setup, ACID guarantees, and the atomic UPDATE pattern gives the fires-once guarantee without a separate lock service.
 
 ### Webhook deduplication
 
@@ -187,13 +200,13 @@ Two layers:
 1. **Pending queue**: `pending_messages` table — duplicates are wasteful but harmless
 2. **Messages table**: `INSERT OR IGNORE INTO messages ... UNIQUE(message_id)` — the authoritative dedup. Even if the same event is delivered and processed twice, the second insert is a no-op.
 
-Truncated payloads are handled by always refetching the full message from Nylas in the processor (we never trust webhook payload data for the message body).
+Truncated payloads are handled by always refetching the full message from Nylas in the processor — webhook payload content is never trusted.
 
 ### AI summarizer seam
 
 `assemblePrompt(messages)` and `parseResponse(text, count)` are pure functions — no I/O, no side effects. They can be unit-tested with fixture data without any API key. The `Summarizer` interface is the boundary the orchestrator depends on; tests can stub it with `{ summarize: async () => fixedResult }`.
 
-The prompt asks Claude for HTML output (no `<html>`/`<body>` tags) structured around: threads needing attention, asks awaiting a reply, deadlines, and general activity. Snippets are capped at 300 characters per message to keep prompt size predictable.
+The prompt instructs Claude to produce structured HTML grouped by: threads needing attention, asks awaiting a reply, deadlines, and general activity — skipping any section with nothing to report. `parseResponse` wraps the output in a styled container with an indigo header banner and inline CSS (required for email client compatibility). Snippets are capped at 300 characters per message to keep prompt size predictable.
 
 ### External dependency interfaces
 
@@ -207,6 +220,7 @@ All external calls (Nylas API, Anthropic API) are behind TypeScript interfaces (
 - **Max messages per summary**: Capped at 200 to keep prompt size and latency bounded. If more arrive in a window, the oldest 200 are summarized.
 - **OAuth state**: CSRF nonces are stored in an in-memory Map with a 10-minute TTL. They do not survive a process restart (acceptable — a restart during an OAuth flow just requires the user to re-click connect).
 - **Cadence as cron expression**: The `cronExpr` field stores a standard 5-field cron expression. The `cron-parser` library computes `nextFireAt` from it.
+- **Single operator key**: The Anthropic API key is server-side — all users share the operator's key. A BYOK model would be the upgrade path for a multi-tenant deployment.
 
 ---
 
