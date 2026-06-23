@@ -33,7 +33,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.listen(config.PORT, () => {
+app.listen(config.PORT, "0.0.0.0", () => {
   console.log(`Server listening on port ${config.PORT}`);
   console.log(`Base URL: ${config.APP_BASE_URL}`);
   console.log(`Database: ${config.DATABASE_PATH} (${db.name})`);
