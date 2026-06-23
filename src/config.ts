@@ -11,7 +11,6 @@ const envSchema = z.object({
   NYLAS_WEBHOOK_SECRET: z.string().default(""),
   NYLAS_API_URI: z.string().url().default("https://api.us.nylas.com"),
 
-  ANTHROPIC_API_KEY: z.string().min(1),
   ANTHROPIC_MODEL: z.string().default("claude-haiku-4-5-20251001"),
 
   DATABASE_PATH: z.string().default("./data/emailorning.db"),

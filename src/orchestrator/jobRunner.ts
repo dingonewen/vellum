@@ -1,15 +1,17 @@
 import type { GrantStore } from "../stores/grantStore";
+import type { UserStore } from "../stores/userStore";
 import type { InboxReader } from "../inbox/inboxReader";
 import type { Summarizer } from "../summarizer/summarizer";
 import type { EmailSender } from "../email/emailSender";
 import type { JobRunner } from "../scheduler/scheduler";
+import { createAnthropicSummarizer } from "../summarizer/anthropicSummarizer";
 
 const DEFAULT_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 export function createJobRunner(
   grantStore: GrantStore,
+  userStore: UserStore,
   inboxReader: InboxReader,
-  summarizer: Summarizer,
   emailSender: EmailSender
 ): JobRunner {
   return async (
@@ -26,7 +28,6 @@ export function createJobRunner(
     const sinceMs = lastSummaryAt ?? Date.now() - DEFAULT_LOOKBACK_MS;
     const sinceSeconds = Math.floor(sinceMs / 1000);
 
-    // Fetch from all connected mailboxes and merge
     const allMessages = (
       await Promise.all(
         grants.map((grant) => inboxReader.fetchSince(grant.grantId, sinceSeconds))
@@ -40,8 +41,14 @@ export function createJobRunner(
       return;
     }
 
+    const user = userStore.findById(userId);
+    if (!user?.anthropicApiKey) {
+      console.error(`No Anthropic API key configured for user ${userId} — skipping digest`);
+      return;
+    }
+    const summarizer: Summarizer = createAnthropicSummarizer(user.anthropicApiKey);
+
     const summary = await summarizer.summarize(allMessages);
-    // Send from the primary (first connected) mailbox
     await emailSender.send(grants[0].grantId, destEmail, summary);
 
     console.log(

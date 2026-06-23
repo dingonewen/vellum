@@ -10,10 +10,10 @@ import { startWebhookProcessor } from "./webhook/processor";
 import { startScheduler } from "./scheduler/scheduler";
 import { nylasClient } from "./nylas/instance";
 import { createGrantStore } from "./stores/grantStore";
+import { createUserStore } from "./stores/userStore";
 import { createMessageStore } from "./stores/messageStore";
 import { createScheduleStore } from "./stores/scheduleStore";
 import { createInboxReader } from "./inbox/inboxReader";
-import { createAnthropicSummarizer } from "./summarizer/anthropicSummarizer";
 import { createEmailSender } from "./email/emailSender";
 import { createJobRunner } from "./orchestrator/jobRunner";
 
@@ -43,8 +43,8 @@ app.listen(config.PORT, () => {
 
   const jobRunner = createJobRunner(
     createGrantStore(db),
+    createUserStore(db),
     createInboxReader(nylasClient),
-    createAnthropicSummarizer(),
     createEmailSender(nylasClient)
   );
   startScheduler(createScheduleStore(db), jobRunner);

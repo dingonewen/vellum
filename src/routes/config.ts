@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { parseExpression } from "cron-parser";
 import { db } from "../db";
+import { createUserStore } from "../stores/userStore";
 import { createGrantStore } from "../stores/grantStore";
 import { createScheduleStore } from "../stores/scheduleStore";
 import { createSessionStore } from "../stores/sessionStore";
@@ -11,12 +12,14 @@ import { getNextFireAt } from "../scheduler/scheduler";
 export const configRouter = Router();
 
 const sessionStore = createSessionStore(db);
+const userStore = createUserStore(db);
 const grantStore = createGrantStore(db);
 const scheduleStore = createScheduleStore(db);
 
 const configSchema = z.object({
   destEmail: z.string().email(),
   cronExpr: z.string().min(1),
+  anthropicApiKey: z.string().min(1),
 });
 
 configRouter.post("/", requireAuth(sessionStore), (req, res) => {
@@ -26,7 +29,7 @@ configRouter.post("/", requireAuth(sessionStore), (req, res) => {
     return;
   }
 
-  const { destEmail, cronExpr } = result.data;
+  const { destEmail, cronExpr, anthropicApiKey } = result.data;
   const userId = req.userId!;
 
   try {
@@ -42,6 +45,8 @@ configRouter.post("/", requireAuth(sessionStore), (req, res) => {
     return;
   }
 
+  userStore.setApiKey(userId, anthropicApiKey);
+
   const nextFireAt = getNextFireAt(cronExpr);
   scheduleStore.upsert(userId, destEmail, cronExpr, nextFireAt);
 
@@ -51,5 +56,6 @@ configRouter.post("/", requireAuth(sessionStore), (req, res) => {
     cronExpr,
     nextFireAt: new Date(nextFireAt).toISOString(),
     mailboxes: grants.map((g) => g.email),
+    usingOwnApiKey: !!anthropicApiKey,
   });
 });

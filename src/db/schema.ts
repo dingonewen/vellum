@@ -1,7 +1,8 @@
 export const CREATE_USERS_TABLE = `
   CREATE TABLE IF NOT EXISTS users (
-    id         TEXT    PRIMARY KEY,
-    created_at INTEGER NOT NULL
+    id                 TEXT    PRIMARY KEY,
+    anthropic_api_key  TEXT,
+    created_at         INTEGER NOT NULL
   )
 `;
 

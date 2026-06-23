@@ -1,5 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { config } from "../config";
 import type { EmailMessage } from "../nylas/types";
 import type { Summarizer } from "./summarizer";
 import type { SummaryResult } from "./types";
@@ -75,15 +74,15 @@ export function parseResponse(text: string, messageCount: number): SummaryResult
   };
 }
 
-export function createAnthropicSummarizer(): Summarizer {
-  const client = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
+export function createAnthropicSummarizer(apiKey: string): Summarizer {
+  const client = new Anthropic({ apiKey });
 
   return {
     async summarize(messages: EmailMessage[]): Promise<SummaryResult> {
       const prompt = assemblePrompt(messages);
 
       const response = await client.messages.create({
-        model: config.ANTHROPIC_MODEL,
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 2048,
         messages: [{ role: "user", content: prompt }],
       });
