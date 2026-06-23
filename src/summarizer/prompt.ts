@@ -18,25 +18,26 @@ export function assemblePrompt(messages: EmailMessage[]): string {
   Preview: ${snippet}`;
   });
 
-  return `You are an AI assistant writing a concise, well-designed email digest.
-Analyze the following inbox messages and produce a summary that helps the reader quickly understand what matters.
+  return `You are an AI assistant writing a refined, literary email digest — elegant and unhurried in tone.
+Analyze the following inbox messages and produce a summary that helps the reader understand what matters most.
 
 Structure your response into these four sections (omit any section that has nothing to report):
 1. 🔴 Needs Attention — senders or threads requiring action or a decision
 2. 💬 Awaiting Your Reply — questions or requests where the reader is the bottleneck
 3. ⏰ Deadlines & Time-Sensitive — anything with an explicit or implied deadline
-4. 📬 Everything Else — brief overview of low-priority activity
+4. 📬 Everything Else — brief overview of lower-priority correspondence
 
 Writing style:
-- Lead with the sender name and the core ask, not the subject line
-- Be direct and specific — "Alex is waiting on your approval for the Q3 budget" not "Email about budget"
+- Lead with the sender's name and the core ask, not the subject line
+- Be direct and specific — "Alex is awaiting your approval for the Q3 budget" not "Email about budget"
+- Prefer measured, precise prose over bullet-point terseness
 - If a section is empty, skip it entirely
 
-Formatting rules (this will be rendered in an email client):
+Formatting rules (this will be rendered inside an email client — inline CSS only):
 - Use inline CSS on every element — no <style> blocks, no class attributes
-- Section headings: <h3 style="margin: 24px 0 8px; font-size: 15px; font-family: -apple-system, sans-serif; color: #1a1a1a;">
-- Each item: <div style="margin: 0 0 12px; padding: 10px 14px; border-left: 3px solid #6366f1; background: #f8f8ff; font-family: -apple-system, sans-serif; font-size: 14px; color: #333; line-height: 1.5;">
-- Sender name in <strong>
+- Section headings: <h3 style="margin: 24px 0 8px; font-size: 15px; font-family: Georgia, 'Times New Roman', serif; color: #4A2C17; letter-spacing: 0.04em; border-bottom: 1px solid #E8DCC8; padding-bottom: 6px;">
+- Each item: <div style="margin: 0 0 14px; padding: 11px 15px; border-left: 3px solid #C4A35A; background: #FDF8F0; font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #2C1810; line-height: 1.65;">
+- Sender name in <strong style="color: #7C4F2A;">
 - Do not include <html>, <head>, <body>, or <ul>/<li> tags
 
 Messages (${messages.length} total):
@@ -52,21 +53,22 @@ export function parseResponse(text: string, messageCount: number): SummaryResult
   });
   const count = `${messageCount} message${messageCount !== 1 ? "s" : ""}`;
 
-  const htmlBody = `<div style="max-width:600px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <div style="background:#6366f1;padding:24px 28px;border-radius:8px 8px 0 0;">
-    <div style="color:#fff;font-size:20px;font-weight:700;">📧 Morning Email Digest</div>
-    <div style="color:#c7d2fe;font-size:13px;margin-top:4px;">📅 ${date} · ${count}</div>
+  const htmlBody = `<div style="max-width:600px;margin:0 auto;font-family:Georgia,'Times New Roman',serif;background:#FDF8F0;">
+  <div style="background:#4A2C17;padding:28px 32px;border-bottom:3px solid #C4A35A;">
+    <div style="color:#F5EFE4;font-size:22px;font-weight:700;letter-spacing:0.02em;">Vellum</div>
+    <div style="color:#E8DCC8;font-size:13px;margin-top:2px;letter-spacing:0.12em;text-transform:uppercase;font-style:italic;">Morning Dispatch</div>
+    <div style="color:#C4A35A;font-size:13px;margin-top:6px;letter-spacing:0.06em;">${date} &nbsp;·&nbsp; ${count}</div>
   </div>
-  <div style="padding:20px 28px;background:#ffffff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+  <div style="padding:24px 32px;background:#FFFDF7;border:1px solid #E8DCC8;border-top:none;">
     ${text}
   </div>
-  <div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px;">
-    Sent by emailorning · <a href="#" style="color:#6366f1;text-decoration:none;">Manage preferences</a>
+  <div style="text-align:center;padding:18px;color:#8B7355;font-size:12px;font-style:italic;">
+    Delivered by Vellum &nbsp;·&nbsp; <a href="#" style="color:#C4A35A;text-decoration:none;">Manage preferences</a>
   </div>
 </div>`;
 
   return {
-    subject: `📧 Morning Email Digest (${count}) - 📅 ${date}`,
+    subject: `Vellum · Morning Dispatch — ${count} · ${date}`,
     htmlBody,
     generatedAt: Date.now(),
   };
