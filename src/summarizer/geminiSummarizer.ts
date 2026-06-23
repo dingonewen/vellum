@@ -2,10 +2,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { EmailMessage } from "../nylas/types";
 import type { Summarizer } from "./summarizer";
 import { assemblePrompt, parseResponse } from "./prompt";
+import { LLM_MODELS } from "./models";
 
 export function createGeminiSummarizer(apiKey: string): Summarizer {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: LLM_MODELS.gemini });
 
   return {
     async summarize(messages: EmailMessage[]) {

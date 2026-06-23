@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { EmailMessage } from "../nylas/types";
 import type { Summarizer } from "./summarizer";
 import { assemblePrompt, parseResponse } from "./prompt";
+import { LLM_MODELS } from "./models";
 
 export function createOpenAISummarizer(apiKey: string): Summarizer {
   const client = new OpenAI({ apiKey });
@@ -11,7 +12,7 @@ export function createOpenAISummarizer(apiKey: string): Summarizer {
       const prompt = assemblePrompt(messages);
 
       const response = await client.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: LLM_MODELS.openai,
         max_tokens: 2048,
         messages: [{ role: "user", content: prompt }],
       });

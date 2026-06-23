@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { EmailMessage } from "../nylas/types";
 import type { Summarizer } from "./summarizer";
 import { assemblePrompt, parseResponse } from "./prompt";
+import { LLM_MODELS } from "./models";
 
 export function createAnthropicSummarizer(apiKey: string): Summarizer {
   const client = new Anthropic({ apiKey });
@@ -11,7 +12,7 @@ export function createAnthropicSummarizer(apiKey: string): Summarizer {
       const prompt = assemblePrompt(messages);
 
       const response = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
+        model: LLM_MODELS.anthropic,
         max_tokens: 2048,
         messages: [{ role: "user", content: prompt }],
       });
