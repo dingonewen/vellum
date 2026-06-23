@@ -1,15 +1,18 @@
 import type { Db } from "../db";
 
+export type LlmProvider = "anthropic" | "gemini" | "openai";
+
 export interface User {
   id: string;
-  anthropicApiKey: string | null;
+  llmProvider: LlmProvider | null;
+  llmApiKey: string | null;
   createdAt: number;
 }
 
 export interface UserStore {
   create(id: string): void;
   findById(id: string): User | null;
-  setApiKey(id: string, apiKey: string): void;
+  setLlmConfig(id: string, provider: LlmProvider, apiKey: string): void;
 }
 
 export function createUserStore(db: Db): UserStore {
@@ -24,17 +27,18 @@ export function createUserStore(db: Db): UserStore {
       return (
         (db
           .prepare(
-            `SELECT id, anthropic_api_key AS anthropicApiKey, created_at AS createdAt
+            `SELECT id, llm_provider AS llmProvider, llm_api_key AS llmApiKey,
+                    created_at AS createdAt
              FROM users WHERE id = ?`
           )
           .get(id) as User | undefined) ?? null
       );
     },
 
-    setApiKey(id: string, apiKey: string): void {
+    setLlmConfig(id: string, provider: LlmProvider, apiKey: string): void {
       db.prepare(
-        `UPDATE users SET anthropic_api_key = ? WHERE id = ?`
-      ).run(apiKey, id);
+        `UPDATE users SET llm_provider = ?, llm_api_key = ? WHERE id = ?`
+      ).run(provider, apiKey, id);
     },
   };
 }

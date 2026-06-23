@@ -19,7 +19,8 @@ const scheduleStore = createScheduleStore(db);
 const configSchema = z.object({
   destEmail: z.string().email(),
   cronExpr: z.string().min(1),
-  anthropicApiKey: z.string().min(1),
+  llmProvider: z.enum(["anthropic", "gemini", "openai"]),
+  llmApiKey: z.string().min(1),
 });
 
 configRouter.post("/", requireAuth(sessionStore), (req, res) => {
@@ -29,7 +30,7 @@ configRouter.post("/", requireAuth(sessionStore), (req, res) => {
     return;
   }
 
-  const { destEmail, cronExpr, anthropicApiKey } = result.data;
+  const { destEmail, cronExpr, llmProvider, llmApiKey } = result.data;
   const userId = req.userId!;
 
   try {
@@ -45,7 +46,7 @@ configRouter.post("/", requireAuth(sessionStore), (req, res) => {
     return;
   }
 
-  userStore.setApiKey(userId, anthropicApiKey);
+  userStore.setLlmConfig(userId, llmProvider, llmApiKey);
 
   const nextFireAt = getNextFireAt(cronExpr);
   scheduleStore.upsert(userId, destEmail, cronExpr, nextFireAt);
@@ -54,8 +55,8 @@ configRouter.post("/", requireAuth(sessionStore), (req, res) => {
     message: "Schedule configured",
     destEmail,
     cronExpr,
+    llmProvider,
     nextFireAt: new Date(nextFireAt).toISOString(),
     mailboxes: grants.map((g) => g.email),
-    usingOwnApiKey: !!anthropicApiKey,
   });
 });
