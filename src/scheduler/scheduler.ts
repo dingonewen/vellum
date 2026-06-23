@@ -3,7 +3,7 @@ import { parseExpression } from "cron-parser";
 import type { ScheduleStore } from "../stores/scheduleStore";
 
 export type JobRunner = (
-  grantId: string,
+  userId: string,
   destEmail: string,
   lastSummaryAt: number | null
 ) => Promise<void>;
@@ -19,15 +19,15 @@ export function startScheduler(store: ScheduleStore, runJob: JobRunner): void {
     if (!schedule) return;
 
     try {
-      await runJob(schedule.grantId, schedule.destEmail, schedule.lastSummaryAt);
+      await runJob(schedule.userId, schedule.destEmail, schedule.lastSummaryAt);
       const nextFireAt = getNextFireAt(schedule.cronExpr);
-      store.complete(schedule.grantId, Date.now(), nextFireAt);
+      store.complete(schedule.userId, Date.now(), nextFireAt);
     } catch (err) {
       console.error(
-        `Scheduler job failed for grant ${schedule.grantId}:`,
+        `Scheduler job failed for user ${schedule.userId}:`,
         err instanceof Error ? err.message : String(err)
       );
-      store.releaseClaim(schedule.grantId);
+      store.releaseClaim(schedule.userId);
     }
   });
 }

@@ -3,10 +3,14 @@ import { randomUUID } from "crypto";
 import { config } from "../config";
 import { nylasClient } from "../nylas/instance";
 import { db } from "../db";
+import { createUserStore } from "../stores/userStore";
+import { createSessionStore } from "../stores/sessionStore";
 import { createGrantStore } from "../stores/grantStore";
 
 export const authRouter = Router();
 
+const userStore = createUserStore(db);
+const sessionStore = createSessionStore(db);
 const grantStore = createGrantStore(db);
 
 const STATE_TTL_MS = 10 * 60 * 1000;
@@ -51,11 +55,52 @@ authRouter.get("/callback", async (req, res) => {
 
   try {
     const { grantId, email } = await nylasClient.exchangeCode(code);
-    grantStore.upsert(grantId, email);
-    console.log(`Grant connected: ${email}`);
+
+    // Reuse existing user from session, or create a new one
+    const sessionId = req.cookies?.session_id as string | undefined;
+    let userId: string;
+
+    if (sessionId) {
+      const session = sessionStore.find(sessionId);
+      userId = session?.userId ?? randomUUID();
+      if (!session) userStore.create(userId);
+    } else {
+      userId = randomUUID();
+      userStore.create(userId);
+    }
+
+    grantStore.upsert(userId, grantId, email);
+    console.log(`Grant connected: ${email} → user ${userId}`);
+
+    // Issue a fresh session cookie
+    const newSessionId = randomUUID();
+    sessionStore.create(newSessionId, userId);
+    res.cookie("session_id", newSessionId, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
     res.redirect(`/?connected=true&email=${encodeURIComponent(email)}`);
   } catch (err) {
     console.error("Code exchange failed:", err instanceof Error ? err.message : String(err));
     res.status(502).send("Failed to complete mailbox connection. Please try again.");
   }
+});
+
+// Returns all mailboxes for the current session user
+authRouter.get("/grants", (req, res) => {
+  const sessionId = req.cookies?.session_id as string | undefined;
+  if (!sessionId) {
+    res.json({ grants: [] });
+    return;
+  }
+  const session = sessionStore.find(sessionId);
+  if (!session) {
+    res.json({ grants: [] });
+    return;
+  }
+  const grants = grantStore.findByUserId(session.userId);
+  res.json({ grants: grants.map((g) => ({ email: g.email, grantId: g.grantId })) });
 });

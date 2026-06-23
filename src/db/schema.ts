@@ -1,6 +1,23 @@
+export const CREATE_USERS_TABLE = `
+  CREATE TABLE IF NOT EXISTS users (
+    id         TEXT    PRIMARY KEY,
+    created_at INTEGER NOT NULL
+  )
+`;
+
+export const CREATE_SESSIONS_TABLE = `
+  CREATE TABLE IF NOT EXISTS sessions (
+    id         TEXT    PRIMARY KEY,
+    user_id    TEXT    NOT NULL REFERENCES users(id),
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  )
+`;
+
 export const CREATE_GRANTS_TABLE = `
   CREATE TABLE IF NOT EXISTS grants (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     TEXT    NOT NULL REFERENCES users(id),
     grant_id    TEXT    UNIQUE NOT NULL,
     email       TEXT    NOT NULL,
     created_at  INTEGER NOT NULL
@@ -45,15 +62,14 @@ export const CREATE_PENDING_IDX = `
 export const CREATE_SCHEDULES_TABLE = `
   CREATE TABLE IF NOT EXISTS schedules (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    grant_id        TEXT    UNIQUE NOT NULL,
+    user_id         TEXT    UNIQUE NOT NULL REFERENCES users(id),
     dest_email      TEXT    NOT NULL,
     cron_expr       TEXT    NOT NULL,
     last_summary_at INTEGER,
     next_fire_at    INTEGER NOT NULL,
     claimed_at      INTEGER,
     created_at      INTEGER NOT NULL,
-    updated_at      INTEGER NOT NULL,
-    FOREIGN KEY (grant_id) REFERENCES grants(grant_id)
+    updated_at      INTEGER NOT NULL
   )
 `;
 
