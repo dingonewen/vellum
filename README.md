@@ -54,8 +54,8 @@ Sessions are cookie-based (30-day TTL, stored in SQLite). A user may connect mul
 ## Installation
 
 ```bash
-git clone https://github.com/dingonewen/emailorning.git
-cd emailorning
+git clone https://github.com/dingonewen/vellum.git
+cd vellum
 npm install
 cp .env.example .env
 # fill in .env with your keys
@@ -78,7 +78,7 @@ cp .env.example .env
 | `APP_BASE_URL` | Public base URL of this server (e.g. `https://your-domain`) |
 | `CALLBACK_URL` | Full OAuth callback URL — must match what's registered in Nylas Dashboard |
 | `PORT` | HTTP port (default: `3000`) |
-| `DATABASE_PATH` | SQLite database file path (default: `./data/emailorning.db`) |
+| `DATABASE_PATH` | SQLite database file path (default: `./data/vellum.db`) |
 
 No server-side LLM key is required. Each user supplies their own API key through the web UI.
 

@@ -1,5 +1,5 @@
 {
-  "name": "emailorning",
+  "name": "vellum",
   "version": "1.0.0",
   "description": "AI inbox digest service using Nylas",
   "main": "dist/server.js",
@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dingonewen/emailorning.git"
+    "url": "git+https://github.com/dingonewen/vellum.git"
   },
   "license": "ISC",
   "dependencies": {

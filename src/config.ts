@@ -13,7 +13,7 @@ const envSchema = z.object({
 
   ANTHROPIC_MODEL: z.string().default("claude-haiku-4-5-20251001"),
 
-  DATABASE_PATH: z.string().default("./data/emailorning.db"),
+  DATABASE_PATH: z.string().default("./data/vellum.db"),
 });
 
 const parsed = envSchema.safeParse(process.env);
