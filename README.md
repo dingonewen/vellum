@@ -45,9 +45,9 @@ Sessions are cookie-based (30-day TTL, stored in SQLite). A user may connect mul
 1. Sign up at [dashboard.nylas.com](https://dashboard.nylas.com)
 2. Create a new application
 3. Note your **API Key** and **Client ID** from the app settings
-4. Under **OAuth → Callback URIs**, add your public callback URL (e.g. `https://your-domain/auth/callback`)
+4. Under **OAuth → Callback URIs**, add your public callback URL (e.g. `https://vellum-mail.up.railway.app/auth/callback`)
 5. Under **Connectors**, enable the email providers you want to support (Google, Microsoft, etc.)
-6. Under **Webhooks**, add a webhook pointing at `https://your-domain/webhooks/nylas` with trigger `message.created` — copy the **signing secret** shown after creation
+6. Under **Webhooks**, add a webhook pointing at `https://vellum-mail.up.railway.app/webhooks/nylas` with trigger `message.created` — copy the **signing secret** shown after creation
 
 ---
 
@@ -75,7 +75,7 @@ cp .env.example .env
 | `NYLAS_CLIENT_ID` | Nylas OAuth client ID |
 | `NYLAS_WEBHOOK_SECRET` | Signing secret from Nylas webhook settings (optional at startup, required for webhook delivery) |
 | `NYLAS_API_URI` | Nylas API base URL (default: `https://api.us.nylas.com`) |
-| `APP_BASE_URL` | Public base URL of this server (e.g. `https://your-domain`) |
+| `APP_BASE_URL` | Public base URL of this server (e.g. `https://vellum-mail.up.railway.app`) |
 | `CALLBACK_URL` | Full OAuth callback URL — must match what's registered in Nylas Dashboard |
 | `PORT` | HTTP port (default: `3000`) |
 | `DATABASE_PATH` | SQLite database file path (default: `./data/vellum.db`) |
@@ -136,7 +136,7 @@ Set `APP_BASE_URL` and `CALLBACK_URL` in `.env` to match the sslip.io hostname.
 
 ### 1. Connect a mailbox
 
-Open `https://your-domain` in a browser. Click **Connect a mailbox** — this redirects to Nylas hosted OAuth. After authorizing, you're returned to the setup page with the connected email shown.
+Open `https://vellum-mail.up.railway.app` in a browser. Click **Connect a mailbox** — this redirects to Nylas hosted OAuth. After authorizing, you're returned to the setup page with the connected email shown.
 
 Connect as many mailboxes as you like. All will be aggregated into a single digest.
 
