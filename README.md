@@ -1,10 +1,18 @@
-# emailorning
+# Vellum
 
-An AI inbox digest service. Connects to your mailbox via Nylas, watches for incoming email via webhook, and periodically emails you an AI-written summary so you can skip the firehose.
+An AI inbox digest service. Connects to your mailboxes via Nylas, watches for incoming email via webhook, and periodically delivers an AI-written summary so you can skip the firehose.
 
-**Demo:** https://youtu.be/iU5g4-ytwSI
+Multi-tenant by design: one user can connect multiple mailboxes. Bring your own LLM key — Anthropic, Gemini, or OpenAI.
 
-![Demo](public/demo.gif)
+**Demo (prototype):** https://youtu.be/iU5g4-ytwSI
+
+> *The clip above shows an earlier prototype. The current interface uses Vellum's parchment-style design:*
+
+![Current UI](public/screenshot.jpg)
+
+*Early prototype walkthrough:*
+
+![Prototype Demo](public/demo.gif)
 
 ---
 
@@ -13,11 +21,13 @@ An AI inbox digest service. Connects to your mailbox via Nylas, watches for inco
 A single Express + TypeScript server with SQLite for persistence and node-cron for scheduling. No separate services or queues required — the DB is the source of truth for everything durable.
 
 ```
-Browser → GET /           → Web UI (connect mailbox + configure cadence)
-Browser → /auth/connect   → Nylas hosted OAuth → /auth/callback → grantId stored in SQLite
+Browser → GET /           → Web UI (connect mailboxes + configure digest)
+Browser → /auth/connect   → Nylas hosted OAuth → /auth/callback → user + grant stored in SQLite
 Nylas   → POST /webhooks/nylas → HMAC verified → messageId enqueued → async processor fetches + stores
-node-cron (every 1 min)   → claimDue() → InboxReader → Summarizer → EmailSender → digest email sent
+node-cron (every 1 min)   → claimDue() → InboxReader (all grants) → LLM Summarizer → EmailSender → digest sent
 ```
+
+Sessions are cookie-based (30-day TTL, stored in SQLite). A user may connect multiple mailboxes; all are aggregated into a single digest.
 
 ---
 
@@ -25,8 +35,8 @@ node-cron (every 1 min)   → claimDue() → InboxReader → Summarizer → Emai
 
 - Node.js 20+
 - A [Nylas](https://nylas.com) account (free tier is enough)
-- An Anthropic API key
-- An Ubuntu VM with a public IP (for webhook delivery and OAuth callbacks)
+- An API key from one of: [Anthropic](https://console.anthropic.com), [Google AI Studio](https://aistudio.google.com), or [OpenAI](https://platform.openai.com)
+- A server with a public HTTPS URL (for webhook delivery and OAuth callbacks)
 
 ---
 
@@ -65,12 +75,12 @@ cp .env.example .env
 | `NYLAS_CLIENT_ID` | Nylas OAuth client ID |
 | `NYLAS_WEBHOOK_SECRET` | Signing secret from Nylas webhook settings (optional at startup, required for webhook delivery) |
 | `NYLAS_API_URI` | Nylas API base URL (default: `https://api.us.nylas.com`) |
-| `APP_BASE_URL` | Public base URL of this server (e.g. `https://your-ip.sslip.io`) |
+| `APP_BASE_URL` | Public base URL of this server (e.g. `https://your-domain`) |
 | `CALLBACK_URL` | Full OAuth callback URL — must match what's registered in Nylas Dashboard |
 | `PORT` | HTTP port (default: `3000`) |
-| `ANTHROPIC_API_KEY` | Anthropic API key for AI summarization |
-| `ANTHROPIC_MODEL` | Claude model to use (default: `claude-haiku-4-5-20251001`) |
 | `DATABASE_PATH` | SQLite database file path (default: `./data/emailorning.db`) |
+
+No server-side LLM key is required. Each user supplies their own API key through the web UI.
 
 ---
 
@@ -82,33 +92,33 @@ cp .env.example .env
 npm run dev
 ```
 
-### Production (VM)
+For local OAuth to work, add `http://localhost:3000/auth/callback` to your Nylas Dashboard callback URIs.
+
+### Production
 
 ```bash
 npm run build
-pm2 start dist/server.js --name emailorning
+pm2 start dist/server.js --name vellum
 pm2 save
 pm2 startup  # auto-start on reboot
 ```
 
 ---
 
-## Exposing the Webhook (HTTPS on the VM)
+## Exposing the Webhook (HTTPS)
 
-Nylas requires HTTPS for OAuth callback URIs and webhook endpoints. On the Ubuntu VM, we use **Caddy + sslip.io**:
+Nylas requires HTTPS for OAuth callbacks and webhook endpoints. On a Linux VM, use **Caddy + sslip.io**:
 
 - `sslip.io` is a free wildcard DNS service — `40-160-15-19.sslip.io` resolves to `40.160.15.19`
-- Caddy automatically obtains a Let's Encrypt certificate for the hostname
-- No domain name purchase or manual certificate management required
+- Caddy automatically obtains a Let's Encrypt certificate
+- No domain purchase or manual certificate management required
 
 ```bash
-# Install Caddy
 sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install -y caddy
 
-# Configure (replace IP dashes to match your VM's public IP)
 sudo tee /etc/caddy/Caddyfile > /dev/null <<'EOF'
 YOUR-IP-WITH-DASHES.sslip.io {
     reverse_proxy localhost:3000
@@ -118,7 +128,7 @@ EOF
 sudo systemctl restart caddy
 ```
 
-Set `APP_BASE_URL=https://YOUR-IP-WITH-DASHES.sslip.io` and `CALLBACK_URL=https://YOUR-IP-WITH-DASHES.sslip.io/auth/callback` in your `.env`.
+Set `APP_BASE_URL` and `CALLBACK_URL` in `.env` to match the sslip.io hostname.
 
 ---
 
@@ -126,36 +136,24 @@ Set `APP_BASE_URL=https://YOUR-IP-WITH-DASHES.sslip.io` and `CALLBACK_URL=https:
 
 ### 1. Connect a mailbox
 
-Open `https://your-domain` in a browser. The web UI loads with a two-step setup form.
+Open `https://your-domain` in a browser. Click **Connect a mailbox** — this redirects to Nylas hosted OAuth. After authorizing, you're returned to the setup page with the connected email shown.
 
-Click **Connect Gmail** — this redirects to Nylas hosted OAuth. After authorizing, Nylas redirects back to the app, which exchanges the code for a `grantId`, persists it in SQLite, and returns you to the setup page with the connected email pre-filled.
+Connect as many mailboxes as you like. All will be aggregated into a single digest.
 
 Unhappy paths handled:
-- User denies consent → redirected back with an error message
+- User denies consent → returned with an error message
 - State nonce expired or missing → rejected with 400
 - Code exchange fails → 502 with message
 
-### 2. Configure your digest cadence
+### 2. Configure your digest
 
-On the same page, fill in the destination email and pick a cadence from the dropdown, then click **Save & Schedule**. The page shows the next scheduled fire time on success.
+Fill in:
+- **Deliver digest to** — the email address to receive digests
+- **Frequency** — a preset cadence (every minute / hourly / daily 8am / weekly Monday)
+- **AI provider** — Anthropic (Claude Haiku), Google (Gemini 2.0 Flash), or OpenAI (GPT-4o mini)
+- **API key** — your personal key for the chosen provider
 
-Alternatively, via API:
-
-```bash
-curl -X POST https://your-domain/config \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "connected@gmail.com",
-    "destEmail": "you@anywhere.com",
-    "cronExpr": "0 8 * * *"
-  }'
-```
-
-`cronExpr` is a standard 5-field cron expression. Examples:
-- `* * * * *` — every minute (for testing)
-- `0 * * * *` — hourly
-- `0 8 * * *` — daily at 8am UTC
-- `0 8 * * 1` — weekly on Monday at 8am UTC
+Click **Save & Schedule**. The confirmation shows which mailboxes are being watched and when the first dispatch arrives.
 
 ### 3. Incoming mail is collected via webhook
 
@@ -169,10 +167,11 @@ A background processor polls every 5 seconds, claims a batch atomically, refetch
 ### 4. Scheduled digest is sent
 
 node-cron fires every minute and calls `claimDue()` — an atomic SQLite transaction that finds a due schedule and claims it. The job runner:
-1. Fetches messages since `last_summary_at` via the Nylas API (paginated, max 200)
-2. Passes them to the AI summarizer (Anthropic Claude)
-3. Sends the styled HTML digest via Nylas to the destination address
-4. Updates `last_summary_at` and computes the next fire time
+1. Fetches messages since `last_summary_at` from **all connected mailboxes** (paginated, max 200 total)
+2. Merges and sorts them by arrival time
+3. Passes them to the user's chosen LLM summarizer
+4. Sends the styled HTML digest via Nylas to the destination address
+5. Updates `last_summary_at` and computes the next fire time
 
 If there are no new messages, the digest is skipped — no empty emails sent.
 
@@ -180,56 +179,60 @@ If there are no new messages, the digest is skipped — no empty emails sent.
 
 ## Design Decisions & Tradeoffs
 
+### Multi-tenant with session-based auth
+
+Each visitor who completes OAuth becomes a `user` (UUID, stored in SQLite). A session cookie (30-day TTL) ties subsequent visits to that user. Connecting another mailbox from the same browser session adds a second `grant` to the same user — all grants are aggregated at digest time.
+
+The `schedules` table is keyed on `user_id` (one schedule per user, not per mailbox), so cadence configuration is unified regardless of how many mailboxes are connected.
+
 ### Scheduling: DB-backed atomic claim
 
 **Mechanism:** `node-cron` polls every minute. All schedule state (`next_fire_at`, `last_summary_at`, `claimed_at`) lives in SQLite.
 
-**How the three requirements are met:**
-
 | Requirement | How |
 |-------------|-----|
 | Survives restart | `next_fire_at` is persisted in SQLite, not RAM |
-| Per-user | One row per `grantId` in `schedules` table |
-| Fires once | `UPDATE schedules SET claimed_at = ? WHERE claimed_at IS NULL AND next_fire_at <= ?` — only the process that wins the UPDATE proceeds |
+| Per-user | One row per `user_id` in `schedules` table |
+| Fires once | `UPDATE schedules SET claimed_at = ? WHERE claimed_at IS NULL AND next_fire_at <= ?` — only the process that wins proceeds |
 
-**Tradeoff:** SQLite's single-writer model means this scales to one process. For multi-instance deployments, PostgreSQL with `SELECT FOR UPDATE SKIP LOCKED` would be the upgrade path. For this single-VM deployment, SQLite is the right fit — zero setup, ACID guarantees, and the atomic UPDATE pattern gives the fires-once guarantee without a separate lock service.
+**Tradeoff:** SQLite's single-writer model means this scales to one process. For multi-instance deployments, PostgreSQL with `SELECT FOR UPDATE SKIP LOCKED` is the upgrade path.
 
 ### Webhook deduplication
 
 Two layers:
-1. **Pending queue**: `pending_messages` table — duplicates are wasteful but harmless
-2. **Messages table**: `INSERT OR IGNORE INTO messages ... UNIQUE(message_id)` — the authoritative dedup. Even if the same event is delivered and processed twice, the second insert is a no-op.
+1. **Pending queue** — `pending_messages` table; duplicates are wasteful but harmless
+2. **Messages table** — `INSERT OR IGNORE INTO messages ... UNIQUE(message_id)`; the authoritative dedup
 
-Truncated payloads are handled by always refetching the full message from Nylas in the processor — webhook payload content is never trusted.
+Truncated payloads are handled by always refetching the full message from Nylas — webhook content is never trusted.
 
 ### AI summarizer seam
 
-`assemblePrompt(messages)` and `parseResponse(text, count)` are pure functions — no I/O, no side effects. They can be unit-tested with fixture data without any API key. The `Summarizer` interface is the boundary the orchestrator depends on; tests can stub it with `{ summarize: async () => fixedResult }`.
+`assemblePrompt(messages)` and `parseResponse(text, count)` are pure functions with no I/O. They are shared across all three provider implementations. The `Summarizer` interface (`{ summarize(messages): Promise<SummaryResult> }`) is the only boundary the orchestrator depends on — stub it with a fixture for testing without any API key.
 
-The prompt instructs Claude to produce structured HTML grouped by: threads needing attention, asks awaiting a reply, deadlines, and general activity — skipping any section with nothing to report. `parseResponse` wraps the output in a styled container with an indigo header banner and inline CSS (required for email client compatibility). Snippets are capped at 300 characters per message to keep prompt size predictable.
+Provider selection happens at job-run time based on the user's stored `llm_provider` field. All model names are centralized in `src/summarizer/models.ts` — one file to update if a model is deprecated.
 
 ### External dependency interfaces
 
-All external calls (Nylas API, Anthropic API) are behind TypeScript interfaces (`NylasClient`, `Summarizer`, `EmailSender`, `InboxReader`). A live mailbox is not required to test the orchestration logic — stub any interface to return fixture data.
+All external calls (Nylas API, LLM APIs) are behind TypeScript interfaces (`NylasClient`, `Summarizer`, `EmailSender`, `InboxReader`). A live mailbox or API key is not required to test orchestration logic.
 
 ---
 
 ## Assumptions
 
-- **First run lookback**: When no previous summary exists, the job fetches the last 24 hours of inbox.
-- **Max messages per summary**: Capped at 200 to keep prompt size and latency bounded. If more arrive in a window, the oldest 200 are summarized.
-- **OAuth state**: CSRF nonces are stored in an in-memory Map with a 10-minute TTL. They do not survive a process restart (acceptable — a restart during an OAuth flow just requires the user to re-click connect).
-- **Cadence as cron expression**: The `cronExpr` field stores a standard 5-field cron expression. The `cron-parser` library computes `nextFireAt` from it.
-- **Single operator key**: The Anthropic API key is server-side — all users share the operator's key. A BYOK model would be the upgrade path for a multi-tenant deployment.
+- **First run lookback:** When no previous summary exists, the job fetches the last 24 hours of inbox.
+- **Max messages per summary:** Capped at 200 across all mailboxes to keep prompt size and latency bounded.
+- **OAuth state:** CSRF nonces are stored in an in-memory Map with a 10-minute TTL. They do not survive a process restart (acceptable — the user just re-clicks connect).
+- **Cadence as cron expression:** A standard 5-field cron expression. `cron-parser` computes `nextFireAt` from it.
+- **Primary sender:** When a user has multiple mailboxes, the digest is sent from the first connected mailbox (ordered by `created_at`).
 
 ---
 
 ## What I'd Do With More Time
 
 - **Unit tests** for `assemblePrompt`, `parseResponse`, `ScheduleStore.claimDue`, and `MessageStore.upsertMessage` using `initDb(":memory:")` fixtures
-- **Webhook retry handling** — currently a failed message fetch leaves the claim set until the 1-hour stale-claim TTL releases it; exponential backoff with a retry counter would be better
-- **Multi-grant scheduler iteration** — `claimDue()` claims one schedule per minute; with many users, a batch claim would be more efficient
+- **Webhook retry handling** — exponential backoff with a retry counter instead of the current stale-claim TTL release
+- **Batch schedule claiming** — `claimDue()` claims one schedule per minute tick; a batch claim would be more efficient with many users
 - **OAuth state persistence** — store nonces in SQLite rather than an in-memory Map so they survive restarts
 - **Rate limiting** on the webhook endpoint to mitigate replay attacks beyond HMAC verification
-- **PM2 ecosystem file** for consistent environment configuration instead of relying on `.env` being present on the VM
-- **BYOK (bring your own key)** — allow users to supply their own Anthropic API key via the UI so the service can be hosted without the operator absorbing per-token costs
+- **Encrypted key storage** — LLM API keys are currently stored in plaintext in SQLite; envelope encryption would be the right upgrade for a production deployment
+- **Railway / cloud deployment guide** — persistent volume setup for SQLite, environment variable configuration
