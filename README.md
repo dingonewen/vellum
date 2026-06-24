@@ -45,9 +45,9 @@ Sessions are cookie-based (30-day TTL, stored in SQLite). A user may connect mul
 1. Sign up at [dashboard.nylas.com](https://dashboard.nylas.com)
 2. Create a new application
 3. Note your **API Key** and **Client ID** from the app settings
-4. Under **OAuth → Callback URIs**, add your public callback URL (e.g. `https://vellum-mail.up.railway.app/auth/callback`)
+4. Under **OAuth → Callback URIs**, add your public callback URL (e.g. `https://your-domain/auth/callback`)
 5. Under **Connectors**, enable the email providers you want to support (Google, Microsoft, etc.)
-6. Under **Webhooks**, add a webhook pointing at `https://vellum-mail.up.railway.app/webhooks/nylas` with trigger `message.created` — copy the **signing secret** shown after creation
+6. Under **Webhooks**, add a webhook pointing at `https://your-domain/webhooks/nylas` with trigger `message.created` — copy the **signing secret** shown after creation
 
 ---
 
@@ -94,7 +94,16 @@ npm run dev
 
 For local OAuth to work, add `http://localhost:3000/auth/callback` to your Nylas Dashboard callback URIs.
 
-### Production
+### Production — Railway (recommended)
+
+1. Connect your GitHub repo to [Railway](https://railway.app) → New Project → Deploy from GitHub
+2. Add a **Volume** mounted at `/data` for SQLite persistence
+3. Set environment variables in Railway → Variables (see table above)
+4. Railway auto-builds and deploys on every push — HTTPS is included
+
+The live instance runs at [vellum-mail.up.railway.app](https://vellum-mail.up.railway.app).
+
+### Production — Self-hosted (Linux VM)
 
 ```bash
 npm run build
@@ -103,11 +112,7 @@ pm2 save
 pm2 startup  # auto-start on reboot
 ```
 
----
-
-## Exposing the Webhook (HTTPS)
-
-Nylas requires HTTPS for OAuth callbacks and webhook endpoints. On a Linux VM, use **Caddy + sslip.io**:
+Nylas requires HTTPS for OAuth callbacks and webhook endpoints. Use **Caddy + sslip.io**:
 
 - `sslip.io` is a free wildcard DNS service — `40-160-15-19.sslip.io` resolves to `40.160.15.19`
 - Caddy automatically obtains a Let's Encrypt certificate
@@ -235,4 +240,3 @@ All external calls (Nylas API, LLM APIs) are behind TypeScript interfaces (`Nyla
 - **OAuth state persistence** — store nonces in SQLite rather than an in-memory Map so they survive restarts
 - **Rate limiting** on the webhook endpoint to mitigate replay attacks beyond HMAC verification
 - **Encrypted key storage** — LLM API keys are currently stored in plaintext in SQLite; envelope encryption would be the right upgrade for a production deployment
-- **Railway / cloud deployment guide** — persistent volume setup for SQLite, environment variable configuration
