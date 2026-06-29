@@ -141,29 +141,36 @@ async function runSteps(
   let context: ScenarioContext = { ...(parentContext ?? scenario.initialContext) };
   let previousMessageId: string | null = null;
 
+  // In dry-run mode, track message IDs in-memory so threading works without DB
+  const dryRunMessageIds = new Map<number, string>();
+
   const endStep = options.maxSteps !== undefined
     ? Math.min(startStep + options.maxSteps, scenario.steps.length)
     : scenario.steps.length;
+
+  const isDryRun = options.dryRun ?? false;
 
   for (let i = startStep; i < endStep; i++) {
     const step = scenario.steps[i];
 
     // Determine reply target for this step
     if (step.replyToStepIndex !== undefined) {
-      const parentRecord = getStepRecord(scenario.id, step.replyToStepIndex);
-      if (parentRecord) {
-        previousMessageId = parentRecord.sent_message_id;
+      if (isDryRun) {
+        previousMessageId = dryRunMessageIds.get(step.replyToStepIndex) ?? null;
       } else {
-        console.warn(`  ⚠ Step ${i} references step ${step.replyToStepIndex}, but it wasn't found in DB. Starting new thread.`);
-        previousMessageId = null;
+        const parentRecord = getStepRecord(scenario.id, step.replyToStepIndex);
+        previousMessageId = parentRecord?.sent_message_id ?? null;
+      }
+      if (!previousMessageId) {
+        console.warn(`  ⚠ Step ${i} references step ${step.replyToStepIndex}, but it wasn't found. Starting new thread.`);
       }
     } else {
       previousMessageId = null; // new thread
     }
 
-    // Apply delay (skip for the very first step)
+    // Apply delay — skip in dry-run mode
     const isFirstInBatch = i === startStep;
-    if (!isFirstInBatch) {
+    if (!isFirstInBatch && !isDryRun) {
       const delayMs = resolveDelay(step.delaySeconds);
       const delayLabel = typeof step.delaySeconds === 'number'
         ? `${step.delaySeconds}s`
@@ -173,12 +180,17 @@ async function runSteps(
     }
 
     try {
-      const result = await executeStep(scenario, i, context, previousMessageId, options.dryRun ?? false);
+      const result = await executeStep(scenario, i, context, previousMessageId, isDryRun);
       context = result.context;
       previousMessageId = result.messageId;
+      if (isDryRun) {
+        dryRunMessageIds.set(i, result.messageId);
+      }
     } catch (err) {
       console.error(`  ✗ Step ${i} failed:`, err instanceof Error ? err.message : err);
-      console.error(`  State saved up to step ${i - 1}. Resume with --from-step ${i}`);
+      if (!isDryRun) {
+        console.error(`  State saved up to step ${i - 1}. Resume with --from-step ${i}`);
+      }
       throw err;
     }
   }
