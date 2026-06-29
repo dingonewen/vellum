@@ -153,16 +153,22 @@ async function runSteps(
   for (let i = startStep; i < endStep; i++) {
     const step = scenario.steps[i];
 
-    // Determine reply target for this step
+    // Determine reply target for this step.
+    // NOTE: Nylas message IDs are grant-scoped, so we can only use
+    // replyToMessageId when the referenced step was sent from the SAME
+    // persona (same Nylas grant). Cross-persona replies rely on subject
+    // threading ("Re:") which Gmail/Outlook respect natively.
     if (step.replyToStepIndex !== undefined) {
+      const parentStep = scenario.steps[step.replyToStepIndex];
       if (isDryRun) {
         previousMessageId = dryRunMessageIds.get(step.replyToStepIndex) ?? null;
       } else {
         const parentRecord = getStepRecord(scenario.id, step.replyToStepIndex);
-        previousMessageId = parentRecord?.sent_message_id ?? null;
-      }
-      if (!previousMessageId) {
-        console.warn(`  ⚠ Step ${i} references step ${step.replyToStepIndex}, but it wasn't found. Starting new thread.`);
+        if (parentRecord && parentStep.senderId === step.senderId) {
+          previousMessageId = parentRecord.sent_message_id; // same grant — threading OK
+        } else {
+          previousMessageId = null; // cross-grant or not found — use subject only
+        }
       }
     } else {
       previousMessageId = null; // new thread
@@ -187,9 +193,17 @@ async function runSteps(
         dryRunMessageIds.set(i, result.messageId);
       }
     } catch (err) {
-      console.error(`  ✗ Step ${i} failed:`, err instanceof Error ? err.message : err);
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error(`  ✗ Step ${i} failed: ${detail}`);
+      // Log full Nylas error details if available
+      if (err && typeof err === 'object' && 'statusCode' in err) {
+        console.error(`     Status: ${(err as Record<string, unknown>).statusCode}`);
+      }
+      if (err && typeof err === 'object' && 'code' in err) {
+        console.error(`     Code: ${(err as Record<string, unknown>).code}`);
+      }
       if (!isDryRun) {
-        console.error(`  State saved up to step ${i - 1}. Resume with --from-step ${i}`);
+        console.error(`     State saved up to step ${i - 1}. Resume with --from-step ${i}`);
       }
       throw err;
     }
