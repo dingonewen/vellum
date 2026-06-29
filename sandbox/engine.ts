@@ -1,0 +1,206 @@
+import { createNylasClient } from '../src/nylas/nylasClient';
+import { BUYER, SELLER } from './persona';
+import { insertThreadRecord, getLatestStep, getStepRecord, resetState } from './db';
+import type { Scenario, ScenarioContext, RunOptions, DelaySpec } from './types';
+
+const nylasClient = createNylasClient();
+
+// ── Template substitution ────────────────────────────────────────────
+
+function resolveTemplate(template: string, context: ScenarioContext): string {
+  return template.replace(/\$\{(\w+)\}/g, (_, key: string) =>
+    key in context ? context[key] : `\${${key}}`
+  );
+}
+
+// ── Delay resolution ─────────────────────────────────────────────────
+
+function resolveDelay(spec: DelaySpec): number {
+  if (typeof spec === 'number') return spec * 1000;
+  // Random uniform in [min, max]
+  return (spec.min + Math.random() * (spec.max - spec.min)) * 1000;
+}
+
+// ── Load a scenario by ID ────────────────────────────────────────────
+
+async function loadScenario(scenarioId: string): Promise<Scenario> {
+  try {
+    // Dynamic import — tsx resolves .ts files when compiled to .js
+    const mod = await import(`./scenarios/${scenarioId}.js`);
+    if (!mod.scenario) {
+      throw new Error(`Scenario file "${scenarioId}" does not export a "scenario" object.`);
+    }
+    return mod.scenario as Scenario;
+  } catch (err: unknown) {
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND') {
+      throw new Error(
+        `Scenario "${scenarioId}" not found. Available: product-inquiry, price-negotiation, shipping-issue`
+      );
+    }
+    throw err;
+  }
+}
+
+// ── Send one step ────────────────────────────────────────────────────
+
+async function executeStep(
+  scenario: Scenario,
+  stepIndex: number,
+  context: ScenarioContext,
+  previousMessageId: string | null,
+  dryRun: boolean,
+): Promise<{ messageId: string; context: ScenarioContext }> {
+  const step = scenario.steps[stepIndex];
+  const persona = step.senderId === 'buyer' ? BUYER : SELLER;
+  const recipient = step.senderId === 'buyer' ? SELLER : BUYER;
+
+  // Merge step-specific variables into context
+  const mergedContext: ScenarioContext = { ...context, ...(step.variables ?? {}) };
+
+  const subject = resolveTemplate(step.subjectTemplate, mergedContext);
+  const body = resolveTemplate(step.bodyTemplate, mergedContext);
+
+  if (dryRun) {
+    console.log(`\n[DRY RUN] Step ${stepIndex}: ${persona.name} → ${recipient.name}`);
+    console.log(`  Subject: ${subject}`);
+    console.log(`  ReplyTo: ${previousMessageId ?? '(new thread)'}`);
+    console.log(`  Body: ${body.slice(0, 300)}${body.length > 300 ? '...' : ''}`);
+    return { messageId: `dry-run-msg-${stepIndex}`, context: mergedContext };
+  }
+
+  // Send via Nylas with threading
+  const result = await nylasClient.sendMessage(
+    persona.grantId,
+    recipient.email,
+    subject,
+    body,
+    [], // no attachments
+    previousMessageId ?? undefined,
+  );
+
+  const threadId = previousMessageId ?? result.messageId;
+
+  // Persist state immediately after successful send
+  insertThreadRecord({
+    threadId,
+    scenarioId: scenario.id,
+    stepIndex,
+    senderId: step.senderId,
+    sentMessageId: result.messageId,
+    subject,
+  });
+
+  console.log(`[SENT] Step ${stepIndex}: ${persona.name} → ${recipient.name}: "${subject}"`);
+
+  return { messageId: result.messageId, context: mergedContext };
+}
+
+// ── Main entry point ─────────────────────────────────────────────────
+
+export async function runScenario(options: RunOptions): Promise<void> {
+  const scenario = await loadScenario(options.scenarioId);
+
+  if (options.loop) {
+    await runLoop(scenario, options);
+    return;
+  }
+
+  const startStep = options.startFromStep ?? getLatestStep(options.scenarioId) + 1;
+  if (startStep >= scenario.steps.length) {
+    console.log(`Scenario "${scenario.name}" already complete (${scenario.steps.length} steps).`);
+    console.log('Use --reset to wipe state and re-run from scratch.');
+    return;
+  }
+
+  console.log(`\n╔══════════════════════════════════════════════════════════════╗`);
+  console.log(`║  Scenario: ${scenario.name.padEnd(51)}║`);
+  console.log(`║  Steps:    ${String(startStep + 1)}–${String(Math.min(options.maxSteps ? startStep + options.maxSteps : scenario.steps.length, scenario.steps.length))} of ${scenario.steps.length}`.padEnd(65) + '║');
+  console.log(`║  Mode:     ${(options.dryRun ? 'DRY RUN' : 'LIVE').padEnd(51)}║`);
+  console.log(`╚══════════════════════════════════════════════════════════════╝\n`);
+
+  await runSteps(scenario, startStep, options);
+}
+
+async function runSteps(
+  scenario: Scenario,
+  startStep: number,
+  options: RunOptions,
+  parentContext?: ScenarioContext,
+): Promise<void> {
+  let context: ScenarioContext = { ...(parentContext ?? scenario.initialContext) };
+  let previousMessageId: string | null = null;
+
+  const endStep = options.maxSteps !== undefined
+    ? Math.min(startStep + options.maxSteps, scenario.steps.length)
+    : scenario.steps.length;
+
+  for (let i = startStep; i < endStep; i++) {
+    const step = scenario.steps[i];
+
+    // Determine reply target for this step
+    if (step.replyToStepIndex !== undefined) {
+      const parentRecord = getStepRecord(scenario.id, step.replyToStepIndex);
+      if (parentRecord) {
+        previousMessageId = parentRecord.sent_message_id;
+      } else {
+        console.warn(`  ⚠ Step ${i} references step ${step.replyToStepIndex}, but it wasn't found in DB. Starting new thread.`);
+        previousMessageId = null;
+      }
+    } else {
+      previousMessageId = null; // new thread
+    }
+
+    // Apply delay (skip for the very first step)
+    const isFirstInBatch = i === startStep;
+    if (!isFirstInBatch) {
+      const delayMs = resolveDelay(step.delaySeconds);
+      const delayLabel = typeof step.delaySeconds === 'number'
+        ? `${step.delaySeconds}s`
+        : `${step.delaySeconds.min}s–${step.delaySeconds.max}s`;
+      console.log(`  ⏳ Waiting ${delayLabel}...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+
+    try {
+      const result = await executeStep(scenario, i, context, previousMessageId, options.dryRun ?? false);
+      context = result.context;
+      previousMessageId = result.messageId;
+    } catch (err) {
+      console.error(`  ✗ Step ${i} failed:`, err instanceof Error ? err.message : err);
+      console.error(`  State saved up to step ${i - 1}. Resume with --from-step ${i}`);
+      throw err;
+    }
+  }
+
+  console.log(`\n✓ Scenario "${scenario.name}" complete.`);
+}
+
+// ── Loop mode: continuous data generation ────────────────────────────
+
+async function runLoop(scenario: Scenario, options: RunOptions): Promise<void> {
+  const intervalMs = (options.loopIntervalMinutes ?? 30) * 60 * 1000;
+  let iteration = 0;
+
+  console.log(`\n🔄 Loop mode: "${scenario.name}"`);
+  console.log(`   Interval: ${(intervalMs / 60000).toFixed(0)} minutes between loops\n`);
+
+  while (true) {
+    iteration++;
+    console.log(`\n─── Loop ${iteration} ───`);
+
+    // Wipe state so each loop is a fresh independent thread
+    resetState(scenario.id);
+
+    try {
+      await runSteps(scenario, 0, { ...options, loop: false });
+    } catch (err) {
+      console.error(`Loop ${iteration} failed:`, err instanceof Error ? err.message : err);
+      console.error('Waiting 60s before retry...');
+      await new Promise(resolve => setTimeout(resolve, 60_000));
+      continue;
+    }
+
+    console.log(`\n⏳ Next loop in ${(intervalMs / 60000).toFixed(0)} minutes...`);
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+}
