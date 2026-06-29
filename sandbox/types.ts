@@ -20,6 +20,13 @@ export type DelaySpec =
   | number                    // exact seconds
   | { min: number; max: number }; // random uniform in [min, max]
 
+// ── Email attachment (resolved from template) ──────────────────────
+export interface AttachmentSpec {
+  filename: string;
+  contentType: string;
+  bodyTemplate: string;      // resolved with scenario context
+}
+
 // ── One step in a scenario ───────────────────────────────────────────
 export interface ScenarioStep {
   senderId: 'buyer' | 'seller';
@@ -30,6 +37,8 @@ export interface ScenarioStep {
   delaySeconds: DelaySpec;
   /** Step-specific variable overrides merged into context for future steps */
   variables?: Record<string, string>;
+  /** Optional attachments (resolved from templates, sent with the email) */
+  attachments?: AttachmentSpec[];
 }
 
 // ── A full scenario ──────────────────────────────────────────────────

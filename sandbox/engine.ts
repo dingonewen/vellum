@@ -1,4 +1,5 @@
 import { createNylasClient } from '../src/nylas/nylasClient';
+import type { EmailAttachment } from '../src/nylas/client';
 import { BUYER, SELLER } from './persona';
 import { insertThreadRecord, getLatestStep, getStepRecord, resetState } from './db';
 import type { Scenario, ScenarioContext, RunOptions, DelaySpec } from './types';
@@ -60,10 +61,20 @@ async function executeStep(
   const subject = resolveTemplate(step.subjectTemplate, mergedContext);
   const body = resolveTemplate(step.bodyTemplate, mergedContext);
 
+  // Resolve attachments from templates
+  const attachments: EmailAttachment[] = (step.attachments ?? []).map((att) => ({
+    filename: resolveTemplate(att.filename, mergedContext),
+    contentType: att.contentType,
+    content: Buffer.from(resolveTemplate(att.bodyTemplate, mergedContext), 'utf-8'),
+  }));
+
   if (dryRun) {
     console.log(`\n[DRY RUN] Step ${stepIndex}: ${persona.name} → ${recipient.name}`);
     console.log(`  Subject: ${subject}`);
     console.log(`  ReplyTo: ${previousMessageId ?? '(new thread)'}`);
+    if (attachments.length > 0) {
+      console.log(`  Attachments: ${attachments.map(a => a.filename).join(', ')}`);
+    }
     console.log(`  Body: ${body.slice(0, 300)}${body.length > 300 ? '...' : ''}`);
     return { messageId: `dry-run-msg-${stepIndex}`, context: mergedContext };
   }
@@ -74,7 +85,7 @@ async function executeStep(
     recipient.email,
     subject,
     body,
-    [], // no attachments
+    attachments,
     previousMessageId ?? undefined,
   );
 
