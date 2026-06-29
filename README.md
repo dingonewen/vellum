@@ -137,6 +137,63 @@ Set `APP_BASE_URL` and `CALLBACK_URL` in `.env` to match the sslip.io hostname.
 
 ---
 
+## Automated Integration Testing Sandbox
+
+The sandbox simulates real email conversations between two personas using their actual Gmail accounts (via Nylas). It generates chronological, contextual email threads for AI agent training and regression testing — no manual inbox clicking required.
+
+**Current scenario:** *PO Processing (14 steps)* — Tifa Lockhart (procurement manager at Shinra Manufacturing) sends a purchase order for precision bearings to Cloud Strife (sales rep at Nibelheim Precision Parts). Production delays, a QC failure, and escalating urgency drive a 14-email thread across two weeks, complete with PDF attachments.
+
+### Quick Start
+
+1. **Set up two Gmail accounts** — buyer (Cloud, supplier) and seller (Tifa, procurement). Connect both via the Vellum OAuth flow (`/auth/connect`).
+
+2. **Add their Nylas grant IDs to `.env`:**
+
+```
+SANDBOX_BUYER_EMAIL=cloud.strife@gmail.com
+SANDBOX_BUYER_GRANT_ID=<nylas-grant-id-for-cloud>
+SANDBOX_SELLER_EMAIL=tifa.lockhart@gmail.com
+SANDBOX_SELLER_GRANT_ID=<nylas-grant-id-for-tifa>
+```
+
+3. **Dry run first** (preview without sending real emails):
+
+```bash
+npm run sandbox:dry
+```
+
+4. **Run the full scenario:**
+
+```bash
+npm run sandbox:run -- po-processing
+```
+
+### Testing Workflow
+
+| Step | Command | What it does |
+|------|---------|-------------|
+| Preview | `npm run sandbox:dry` | Print all 14 emails without sending — verify templates |
+| Smoke test | `npm run sandbox:run -- po-processing --max-steps 3` | Send first 3 emails, verify Inbox delivery |
+| Resume | `npm run sandbox:run -- po-processing --from-step 3` | Continue from step 3 after a crash |
+| Full run | `npm run sandbox:run -- po-processing` | Run entire 14-step thread |
+| Loop | `npm run sandbox:run -- po-processing --loop --loop-interval 60` | Generate new threads every hour |
+| Inspect | `npm run sandbox:list` | View all sent messages grouped by thread |
+| Verify | `npm run sandbox:inbox -- seller` | Check Tifa's inbox via Nylas API |
+| Reset | `npm run sandbox:reset` | Wipe state, start fresh |
+
+### What to Look For
+
+- **Threading:** Gmail groups all 14 emails into one conversation. Verify by opening either inbox — the full back-and-forth should appear as a single collapsed thread.
+- **Attachments:** Step 0 (PO) and Step 9 (QC Report) include PDF attachments generated inline.
+- **Chronology:** The urgency escalates naturally — friendly tone → slight concern → deadline panic → resolution and relationship repair.
+- **Crash recovery:** Kill the script mid-run and resume with `--from-step N` — it picks up from the last saved step.
+
+### Writing Custom Scenarios
+
+See `sandbox/README.md` for the scenario DSL and examples. Each scenario is a TypeScript file exporting a `Scenario` object with `initialContext` and an ordered `steps` array. Templates use `${variable}` substitution with context accumulated across steps.
+
+---
+
 ## End-to-End Flow
 
 ### 1. Connect a mailbox
@@ -234,6 +291,7 @@ All external calls (Nylas API, LLM APIs) are behind TypeScript interfaces (`Nyla
 
 ## What I'd Do With More Time
 
+- ✅ **Automated integration testing sandbox** — persona-driven email simulation with real Gmail accounts, 14-step PO processing scenario with PDF attachments, dry-run mode, crash recovery, and continuous loop generation (see [Sandbox Testing](#automated-integration-testing-sandbox))
 - **Unit tests** for `assemblePrompt`, `parseResponse`, `ScheduleStore.claimDue`, and `MessageStore.upsertMessage` using `initDb(":memory:")` fixtures
 - **Webhook retry handling** — exponential backoff with a retry counter instead of the current stale-claim TTL release
 - **Batch schedule claiming** — `claimDue()` claims one schedule per minute tick; a batch claim would be more efficient with many users
