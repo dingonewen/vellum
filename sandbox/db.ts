@@ -7,14 +7,15 @@ const DB_PATH = path.resolve(process.cwd(), 'data', 'sandbox.db');
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS threads (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    thread_id        TEXT    NOT NULL,
-    scenario_id      TEXT    NOT NULL,
-    step_index       INTEGER NOT NULL,
-    sender_id        TEXT    NOT NULL,
-    sent_message_id  TEXT    NOT NULL,
-    subject          TEXT    NOT NULL,
-    sent_at          INTEGER NOT NULL
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id             TEXT    NOT NULL,
+    scenario_id           TEXT    NOT NULL,
+    step_index            INTEGER NOT NULL,
+    sender_id             TEXT    NOT NULL,
+    sent_message_id       TEXT    NOT NULL,
+    recipient_message_id  TEXT,
+    subject               TEXT    NOT NULL,
+    sent_at               INTEGER NOT NULL
   );
 
   CREATE INDEX IF NOT EXISTS idx_threads_scenario
@@ -43,15 +44,16 @@ export interface ThreadInsert {
   stepIndex: number;
   senderId: string;
   sentMessageId: string;
+  recipientMessageId?: string;
   subject: string;
 }
 
 export function insertThreadRecord(r: ThreadInsert): void {
   const d = getDb();
   d.prepare(`
-    INSERT INTO threads (thread_id, scenario_id, step_index, sender_id, sent_message_id, subject, sent_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(r.threadId, r.scenarioId, r.stepIndex, r.senderId, r.sentMessageId, r.subject, Date.now());
+    INSERT INTO threads (thread_id, scenario_id, step_index, sender_id, sent_message_id, recipient_message_id, subject, sent_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(r.threadId, r.scenarioId, r.stepIndex, r.senderId, r.sentMessageId, r.recipientMessageId ?? null, r.subject, Date.now());
 }
 
 /** Return the highest completed step index for a scenario, or -1 if none. */
@@ -67,11 +69,11 @@ export function getLatestStep(scenarioId: string): number {
 export function getStepRecord(
   scenarioId: string,
   stepIndex: number,
-): { sent_message_id: string } | undefined {
+): { sent_message_id: string; recipient_message_id: string | null } | undefined {
   const d = getDb();
   return d.prepare(`
-    SELECT sent_message_id FROM threads WHERE scenario_id = ? AND step_index = ?
-  `).get(scenarioId, stepIndex) as { sent_message_id: string } | undefined;
+    SELECT sent_message_id, recipient_message_id FROM threads WHERE scenario_id = ? AND step_index = ?
+  `).get(scenarioId, stepIndex) as { sent_message_id: string; recipient_message_id: string | null } | undefined;
 }
 
 /** Wipe state. Pass a scenarioId to reset only that scenario; omit to wipe all. */

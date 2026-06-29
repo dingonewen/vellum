@@ -42,6 +42,47 @@ async function loadScenario(scenarioId: string): Promise<Scenario> {
   }
 }
 
+// ── Cross-grant message ID resolution ───────────────────────────────
+
+/**
+ * Poll the recipient's inbox to find the just-sent message and return
+ * its messageId IN THE RECIPIENT'S grant context. This is different
+ * from the sender's messageId because Nylas IDs are grant-scoped.
+ *
+ * Using the recipient's ID as replyToMessageId produces proper
+ * In-Reply-To / References headers that Gmail and Outlook respect.
+ */
+async function findRecipientMessageId(
+  recipientGrantId: string,
+  subject: string,
+  sentAt: number,
+): Promise<string | null> {
+  const since = Math.floor(sentAt / 1000) - 30; // look back 30s before send
+  const maxTries = 6;
+  const pollMs = 5000;
+
+  for (let attempt = 0; attempt < maxTries; attempt++) {
+    if (attempt > 0) {
+      await new Promise(r => setTimeout(r, pollMs));
+    }
+    try {
+      const page = await nylasClient.listMessages(recipientGrantId, {
+        sinceTimestamp: since,
+        limit: 20,
+      });
+      const match = page.messages.find(m => m.subject === subject);
+      if (match) {
+        console.log(`     ✓ Found recipient message after ${attempt * 5}s`);
+        return match.id;
+      }
+    } catch {
+      // Retry on transient errors
+    }
+  }
+  console.warn(`     ⚠ Could not find message in recipient inbox after ${maxTries * pollMs / 1000}s`);
+  return null;
+}
+
 // ── Send one step ────────────────────────────────────────────────────
 
 async function executeStep(
@@ -89,7 +130,15 @@ async function executeStep(
     previousMessageId ?? undefined,
   );
 
+  const sentAt = Date.now();
   const threadId = previousMessageId ?? result.messageId;
+
+  // Look up the message in the RECIPIENT's inbox to get their grant's messageId.
+  // This ID is needed for proper In-Reply-To threading when they reply.
+  let recipientMessageId: string | null = null;
+  if (!dryRun) {
+    recipientMessageId = await findRecipientMessageId(recipient.grantId, subject, sentAt);
+  }
 
   // Persist state immediately after successful send
   insertThreadRecord({
@@ -98,6 +147,7 @@ async function executeStep(
     stepIndex,
     senderId: step.senderId,
     sentMessageId: result.messageId,
+    recipientMessageId: recipientMessageId ?? undefined,
     subject,
   });
 
@@ -154,21 +204,17 @@ async function runSteps(
     const step = scenario.steps[i];
 
     // Determine reply target for this step.
-    // NOTE: Nylas message IDs are grant-scoped, so we can only use
-    // replyToMessageId when the referenced step was sent from the SAME
-    // persona (same Nylas grant). Cross-persona replies rely on subject
-    // threading ("Re:") which Gmail/Outlook respect natively.
+    // Use recipient_message_id — the parent message's ID in the CURRENT
+    // sender's grant context (resolved after parent was sent).
+    // This produces proper In-Reply-To/References headers for Gmail/Outlook threading.
     if (step.replyToStepIndex !== undefined) {
-      const parentStep = scenario.steps[step.replyToStepIndex];
       if (isDryRun) {
         previousMessageId = dryRunMessageIds.get(step.replyToStepIndex) ?? null;
       } else {
         const parentRecord = getStepRecord(scenario.id, step.replyToStepIndex);
-        if (parentRecord && parentStep.senderId === step.senderId) {
-          previousMessageId = parentRecord.sent_message_id; // same grant — threading OK
-        } else {
-          previousMessageId = null; // cross-grant or not found — use subject only
-        }
+        // recipient_message_id is the message ID in the RESPONDER's grant —
+        // exactly what we need for replyToMessageId
+        previousMessageId = parentRecord?.recipient_message_id ?? parentRecord?.sent_message_id ?? null;
       }
     } else {
       previousMessageId = null; // new thread
