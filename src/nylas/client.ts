@@ -7,6 +7,10 @@ export interface EmailAttachment {
   size?: number;
 }
 
+export interface SendResult {
+  messageId: string;
+}
+
 export interface NylasClient {
   buildAuthUrl(params: AuthUrlParams): string;
   exchangeCode(code: string): Promise<CodeExchangeResult>;
@@ -17,6 +21,7 @@ export interface NylasClient {
     to: string,
     subject: string,
     htmlBody: string,
-    attachments?: EmailAttachment[]
-  ): Promise<void>;
+    attachments?: EmailAttachment[],
+    replyToMessageId?: string
+  ): Promise<SendResult>;
 }

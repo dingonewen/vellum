@@ -1,6 +1,6 @@
 import Nylas from "nylas";
 import { config } from "../config";
-import type { NylasClient } from "./client";
+import type { NylasClient, SendResult } from "./client";
 import type {
   AuthUrlParams,
   CodeExchangeResult,
@@ -85,17 +85,20 @@ export function createNylasClient(): NylasClient {
       to: string,
       subject: string,
       htmlBody: string,
-      attachments = []
-    ): Promise<void> {
-      await nylas.messages.send({
+      attachments = [],
+      replyToMessageId?: string
+    ): Promise<SendResult> {
+      const response = await nylas.messages.send({
         identifier: grantId,
         requestBody: {
           to: [{ email: to }],
           subject,
           body: htmlBody,
           ...(attachments.length > 0 ? { attachments } : {}),
+          ...(replyToMessageId ? { replyToMessageId } : {}),
         },
       });
+      return { messageId: response.data.id };
     },
   };
 }
