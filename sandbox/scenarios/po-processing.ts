@@ -103,7 +103,7 @@ export const scenario: Scenario = {
         '<p>A quick note — our standard QC protocol for ABEC-7 bearings includes individual runout testing, which adds about two days to the production cycle. This is already factored into the ${delivery_days} timeline I\'m confirming.</p>\n' +
         '<p>I\'ll send you a production schedule once we break ground. If anything changes on your end (specs, quantities, shipping address), please let me know right away.</p>\n' +
         '<p>Best regards,<br/><strong>${seller_name}</strong><br/>Sales Representative<br/>Nibelheim Precision Parts</p>',
-      delaySeconds: { min: 120, max: 300 },
+      delaySeconds: { min: 300, max: 600 },
     },
 
     // ── Step 2: Tifa requests production update ────────────────
@@ -138,7 +138,7 @@ export const scenario: Scenario = {
         '<p>I\'ve flagged your account for early QC notification as you requested. If any batch fails runout testing, I\'ll let you know immediately — not at the end of the line.</p>\n' +
         '<p>So far everything is proceeding normally. Our grinding department has been running ABEC-7 tolerance work all month, so they\'re well dialed in.</p>\n' +
         '<p>Best,<br/>${seller_name}</p>',
-      delaySeconds: { min: 60, max: 180 },
+      delaySeconds: { min: 300, max: 600 },
     },
 
     // ── Step 4: Tifa mid-point check-in (5 days later) ──────────
@@ -165,7 +165,7 @@ export const scenario: Scenario = {
         '<p>Your order has been a smooth run so far. I see no reason we won\'t hit the ${deadline_date} ship date.</p>\n' +
         '<p>I\'ll update you after the first round of runout testing on the 10th.</p>\n' +
         '<p>Best,<br/>${seller_name}</p>',
-      delaySeconds: { min: 60, max: 120 },
+      delaySeconds: { min: 300, max: 600 },
     },
 
     // ── Step 6: Deadline day — Tifa wants tracking ─────────────
@@ -205,7 +205,7 @@ export const scenario: Scenario = {
         '<p>I should have caught this trend during in-process inspection rather than waiting for final QC. That\'s on me, and I\'m sorry.</p>\n' +
         '<p>Please let me know if the partial shipment works for you. I can have it on a truck in two hours.</p>\n' +
         '<p>${seller_name}</p>',
-      delaySeconds: { min: 60, max: 180 },
+      delaySeconds: { min: 300, max: 600 },
     },
 
     // ── Step 8: Tifa — angry, escalating ───────────────────────
@@ -240,7 +240,7 @@ export const scenario: Scenario = {
         '<p>The air freight for the 100-unit shipment is on us — I\'ll send the tracking number as soon as the FedEx pickup scan registers tomorrow morning.</p>\n' +
         '<p>I understand this put you in a tough spot with your plant manager, and I don\'t take that lightly. The ${discount_offer} discount on your next order stands — I\'ve already noted it on your account.</p>\n' +
         '<p>Regards,<br/>${seller_name}</p>',
-      delaySeconds: { min: 120, max: 300 },
+      delaySeconds: { min: 300, max: 600 },
       attachments: [
         {
           filename: 'QC_Report_${po_number}.pdf',
@@ -310,7 +310,7 @@ export const scenario: Scenario = {
         '<p>${buyer_name}, I know this didn\'t go as smoothly as either of us wanted. I\'ve done a full review with our production manager to improve in-process QC flagging — your feedback about early notification was completely fair and we\'re making changes so this doesn\'t repeat.</p>\n' +
         '<p>If anything looks off when the second shipment arrives, call me directly. I\'ll make it right same-day.</p>\n' +
         '<p>Best,<br/>${seller_name}</p>',
-      delaySeconds: { min: 120, max: 240 },
+      delaySeconds: { min: 300, max: 600 },
     },
 
     // ── Step 12: Tifa confirms receipt ─────────────────────────
@@ -325,7 +325,7 @@ export const scenario: Scenario = {
         '<p>I\'ll be honest — the communication gap at the QC stage is a concern for future orders. If we\'re going to keep Nibelheim as our ABEC-7 bearing supplier, I need a commitment that in-process QC flags reach me <strong>before</strong> they become shipment-day surprises.</p>\n' +
         '<p>Let\'s schedule a call next week to discuss our Q3 forecast. If we can agree on an early-warning protocol for QC issues, there\'s more business here.</p>\n' +
         '<p>${buyer_name}</p>',
-      delaySeconds: { min: 60, max: 120 },
+      delaySeconds: { min: 300, max: 600 },
     },
 
     // ── Step 13: Cloud — closing, relationship repair ──────────
@@ -347,7 +347,7 @@ export const scenario: Scenario = {
         '<p>Phone: (555) 019-4821<br/>\n' +
         'Email: ${seller_email}</p>\n' +
         '<p>Best regards,<br/><strong>${seller_name}</strong><br/>Sales Representative<br/>Nibelheim Precision Parts</p>',
-      delaySeconds: { min: 120, max: 300 },
+      delaySeconds: { min: 300, max: 600 },
     },
   ],
 };
