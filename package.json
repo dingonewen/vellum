@@ -7,7 +7,12 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
-    "lint": "eslint src --ext .ts,.tsx"
+    "lint": "eslint src --ext .ts,.tsx",
+    "sandbox:run": "npx tsx sandbox/scripts/run-scenario.ts",
+    "sandbox:dry": "npx tsx sandbox/scripts/run-scenario.ts po-processing --dry-run",
+    "sandbox:list": "npx tsx sandbox/scripts/list-threads.ts",
+    "sandbox:reset": "npx tsx sandbox/scripts/reset.ts",
+    "sandbox:inbox": "npx tsx sandbox/scripts/check-inbox.ts"
   },
   "repository": {
     "type": "git",
