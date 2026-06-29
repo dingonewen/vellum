@@ -27,22 +27,30 @@ if (threads.length === 0) {
   process.exit(0);
 }
 
-// Group by thread
-const threadsByThread = new Map<string, typeof threads>();
-for (const t of threads) {
-  const existing = threadsByThread.get(t.thread_id) || [];
-  existing.push(t);
-  threadsByThread.set(t.thread_id, existing);
+// Group by conversation — extract PO number or strip "Re:" prefix
+function groupKey(subject: string): string {
+  const poMatch = subject.match(/PO-\d{4}-\d{4}/);
+  if (poMatch) return poMatch[0];
+  return subject.replace(/^Re:\s*/i, '');
 }
 
-console.log(`\n${threads.length} messages in ${threadsByThread.size} thread(s):\n`);
+const threadsByGroup = new Map<string, typeof threads>();
+for (const t of threads) {
+  const key = groupKey(t.subject);
+  const existing = threadsByGroup.get(key) || [];
+  existing.push(t);
+  threadsByGroup.set(key, existing);
+}
 
-for (const [threadId, msgs] of threadsByThread) {
-  console.log(`┌─ Thread: ${threadId.slice(0, 8)}... (${msgs[0].scenario_id})`);
-  for (const m of msgs.sort((a, b) => a.step_index - b.step_index)) {
+console.log(`\n${threads.length} messages in ${threadsByGroup.size} conversation(s):\n`);
+
+for (const [key, msgs] of threadsByGroup) {
+  const sorted = msgs.sort((a, b) => a.step_index - b.step_index);
+  console.log(`┌─ Conversation: "${sorted[0].subject.replace(/^Re:\s*/i, '').slice(0, 80)}"`);
+  for (const m of sorted) {
     const date = new Date(m.sent_at).toLocaleString();
     const sender = m.sender_id === 'buyer' ? 'Cloud' : 'Tifa';
-    console.log(`│  [${m.step_index}] ${sender}: "${m.subject}" — ${date}`);
+    console.log(`│  [${String(m.step_index).padStart(2)}] ${sender.padEnd(6)} ${date}  ${m.subject.slice(0, 70)}`);
   }
   console.log(`└─ ${msgs.length} messages\n`);
 }

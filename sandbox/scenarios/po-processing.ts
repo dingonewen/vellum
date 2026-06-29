@@ -15,6 +15,7 @@ export const scenario: Scenario = {
     buyer_email: '',
     seller_email: '',
     po_number: poNum,
+    original_subject: `Purchase Order ${poNum} — Precision Ball Bearings — ABEC-7 Grade, 6205-2RS`,
     product_desc: 'Precision Ball Bearings — ABEC-7 Grade, 6205-2RS',
     quantity: '500',
     unit_price: '$18.50',
@@ -95,7 +96,7 @@ export const scenario: Scenario = {
     {
       senderId: 'buyer',
       replyToStepIndex: 0,
-      subjectTemplate: 'Re: Purchase Order ${po_number} — Confirmed',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>Dear ${buyer_name},</p>\n' +
         '<p>Thank you for the order! Purchase Order <strong>${po_number}</strong> has been received and entered into our system.</p>\n' +
@@ -110,7 +111,7 @@ export const scenario: Scenario = {
     {
       senderId: 'seller',
       replyToStepIndex: 1,
-      subjectTemplate: 'Re: ${po_number} — Production Schedule Request',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${seller_name},</p>\n' +
         '<p>Glad to hear everything is on track. Please send the production schedule when you have it — I need to update our MRP system with firm dates.</p>\n' +
@@ -123,7 +124,7 @@ export const scenario: Scenario = {
     {
       senderId: 'buyer',
       replyToStepIndex: 2,
-      subjectTemplate: 'Re: ${po_number} — Production Schedule Attached',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${buyer_name},</p>\n' +
         '<p>Here\'s the production timeline for ${po_number}:</p>\n' +
@@ -145,7 +146,7 @@ export const scenario: Scenario = {
     {
       senderId: 'seller',
       replyToStepIndex: 3,
-      subjectTemplate: 'Re: ${po_number} — Mid-Point Status Check',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${seller_name},</p>\n' +
         '<p>Checking in at the mid-point. Our production planning meeting is tomorrow and I need to confirm that the ${deadline_date} ship date is still firm.</p>\n' +
@@ -158,7 +159,7 @@ export const scenario: Scenario = {
     {
       senderId: 'buyer',
       replyToStepIndex: 4,
-      subjectTemplate: 'Re: ${po_number} — On Track, No Issues',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${buyer_name},</p>\n' +
         '<p>All good here. Grinding and honing are complete — the raceways are measuring within 0.5 micron tolerance, which is well within ABEC-7 spec. Assembly starts tomorrow as scheduled.</p>\n' +
@@ -172,7 +173,7 @@ export const scenario: Scenario = {
     {
       senderId: 'seller',
       replyToStepIndex: 5,
-      subjectTemplate: 'URGENT: ${po_number} — Tracking Required Today',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${seller_name},</p>\n' +
         '<p>Today is <strong>${deadline_date}</strong> — the agreed ship date. I don\'t see a tracking number in our system yet.</p>\n' +
@@ -186,7 +187,7 @@ export const scenario: Scenario = {
     {
       senderId: 'buyer',
       replyToStepIndex: 6,
-      subjectTemplate: 'Re: ${po_number} — QC Issue, Revised Timeline',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${buyer_name},</p>\n' +
         '<p>I\'m going to be straight with you — we hit a problem.</p>\n' +
@@ -212,7 +213,7 @@ export const scenario: Scenario = {
     {
       senderId: 'seller',
       replyToStepIndex: 7,
-      subjectTemplate: 'Re: ${po_number} — Unacceptable. Partial Shipment Now.',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${seller_name},</p>\n' +
         '<p>I appreciate the honesty, but this should have been flagged during in-process inspection like I specifically asked for in my July 2 email. We\'re now reacting instead of planning.</p>\n' +
@@ -227,7 +228,7 @@ export const scenario: Scenario = {
     {
       senderId: 'buyer',
       replyToStepIndex: 8,
-      subjectTemplate: 'Re: ${po_number} — QC Passed, Shipping ${new_deadline}',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${buyer_name},</p>\n' +
         '<p>Good news — all 100 remaining units passed final runout testing this morning. Roundness measurements are back within ABEC-7 tolerance across the board. Full QC report is attached.</p>\n' +
@@ -278,7 +279,7 @@ export const scenario: Scenario = {
     {
       senderId: 'seller',
       replyToStepIndex: 9,
-      subjectTemplate: 'Re: ${po_number} — Acknowledged. Tracking Required.',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${seller_name},</p>\n' +
         '<p>QC report received and reviewed — thank you for the 100% inspection on the reworked units. That\'s the right call for tolerance-critical parts.</p>\n' +
@@ -292,7 +293,7 @@ export const scenario: Scenario = {
     {
       senderId: 'buyer',
       replyToStepIndex: 10,
-      subjectTemplate: 'Re: ${po_number} — Shipped! Tracking ${tracking_number}',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${buyer_name},</p>\n' +
         '<p>The remaining 100 units are on their way. FedEx picked up 20 minutes ago.</p>\n' +
@@ -317,7 +318,7 @@ export const scenario: Scenario = {
     {
       senderId: 'seller',
       replyToStepIndex: 11,
-      subjectTemplate: 'Re: ${po_number} — Both Shipments Received',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${seller_name},</p>\n' +
         '<p>Both shipments have arrived and passed receiving inspection. The full 500 units are now in inventory and feeding the production line.</p>\n' +
@@ -332,7 +333,7 @@ export const scenario: Scenario = {
     {
       senderId: 'buyer',
       replyToStepIndex: 12,
-      subjectTemplate: 'Re: ${po_number} — Closing Out & Next Steps',
+      subjectTemplate: 'Re: ${original_subject}',
       bodyTemplate:
         '<p>${buyer_name},</p>\n' +
         '<p>Thank you for the candid feedback — and for the opportunity to make this right. I don\'t take your business for granted.</p>\n' +
