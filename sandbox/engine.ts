@@ -35,7 +35,7 @@ async function loadScenario(scenarioId: string): Promise<Scenario> {
   } catch (err: unknown) {
     if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND') {
       throw new Error(
-        `Scenario "${scenarioId}" not found. Available: product-inquiry, price-negotiation, shipping-issue`
+        `Scenario "${scenarioId}" not found. Available: po-processing`
       );
     }
     throw err;
