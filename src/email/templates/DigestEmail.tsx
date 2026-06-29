@@ -32,7 +32,7 @@ export function DigestEmail({ summary }: DigestEmailProps): ReactElement {
             <Text style={eyebrow}>Inbox Digest</Text>
           </Section>
           <Section style={content}>
-            <Section dangerouslySetInnerHTML={{ __html: summary.htmlBody }} />
+            <div dangerouslySetInnerHTML={{ __html: summary.htmlBody }} />
           </Section>
           <Text style={footer}>Generated {generatedAt}. PDF copy attached for your records.</Text>
         </Container>
