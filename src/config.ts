@@ -11,6 +11,9 @@ const envSchema = z.object({
   NYLAS_WEBHOOK_SECRET: z.string().default(""),
   NYLAS_API_URI: z.string().url().default("https://api.us.nylas.com"),
 
+  GOTENBERG_URL: z.string().url().default("http://localhost:3001"),
+  ENABLE_PDF_ATTACHMENTS: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+
   ANTHROPIC_MODEL: z.string().default("claude-haiku-4-5-20251001"),
 
   DATABASE_PATH: z.string().default("./data/vellum.db"),

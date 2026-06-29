@@ -84,7 +84,8 @@ export function createNylasClient(): NylasClient {
       grantId: string,
       to: string,
       subject: string,
-      htmlBody: string
+      htmlBody: string,
+      attachments = []
     ): Promise<void> {
       await nylas.messages.send({
         identifier: grantId,
@@ -92,6 +93,7 @@ export function createNylasClient(): NylasClient {
           to: [{ email: to }],
           subject,
           body: htmlBody,
+          ...(attachments.length > 0 ? { attachments } : {}),
         },
       });
     },
