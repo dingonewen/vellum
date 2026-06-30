@@ -37,6 +37,8 @@ export interface ScenarioStep {
   delaySeconds: DelaySpec;
   /** Step-specific variable overrides merged into context for future steps */
   variables?: Record<string, string>;
+  /** Override the persona's default display name for this step (e.g., different suppliers) */
+  senderName?: string;
   /** Optional attachments (resolved from templates, sent with the email) */
   attachments?: AttachmentSpec[];
 }

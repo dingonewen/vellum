@@ -102,6 +102,9 @@ async function executeStep(
 ): Promise<{ messageId: string; context: ScenarioContext }> {
   const step = scenario.steps[stepIndex];
   const persona = step.senderId === 'primary' ? PRIMARY : CLOUD;
+  const displayName = step.senderName
+    ? resolveTemplate(step.senderName, context)
+    : persona.name;
   const recipient = step.senderId === 'primary' ? CLOUD : PRIMARY;
 
   // Merge step-specific variables into context
@@ -118,7 +121,7 @@ async function executeStep(
   }));
 
   if (dryRun) {
-    console.log(`\n[DRY RUN] Step ${stepIndex}: ${persona.name} → ${recipient.name}`);
+    console.log(`\n[DRY RUN] Step ${stepIndex}: ${displayName} → ${recipient.name}`);
     console.log(`  Subject: ${subject}`);
     console.log(`  ReplyTo: ${previousMessageId ?? '(new thread)'}`);
     if (attachments.length > 0) {
@@ -159,7 +162,7 @@ async function executeStep(
     subject,
   });
 
-  console.log(`[SENT] Step ${stepIndex}: ${persona.name} → ${recipient.name}: "${subject}"`);
+  console.log(`[SENT] Step ${stepIndex}: ${displayName} → ${recipient.name}: "${subject}"`);
 
   return { messageId: result.messageId, context: mergedContext };
 }
