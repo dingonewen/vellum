@@ -18,6 +18,11 @@ const SCHEMA = `
     sent_at               INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS scenario_state (
+    scenario_id TEXT PRIMARY KEY,
+    context_json TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_threads_scenario
     ON threads (scenario_id, step_index);
 
@@ -81,9 +86,29 @@ export function resetState(scenarioId?: string): void {
   const d = getDb();
   if (scenarioId) {
     d.prepare('DELETE FROM threads WHERE scenario_id = ?').run(scenarioId);
+    d.prepare('DELETE FROM scenario_state WHERE scenario_id = ?').run(scenarioId);
   } else {
     d.prepare('DELETE FROM threads').run();
+    d.prepare('DELETE FROM scenario_state').run();
   }
+}
+
+/** Save or update the scenario's accumulated context for resume. */
+export function saveScenarioContext(scenarioId: string, context: Record<string, string>): void {
+  const d = getDb();
+  d.prepare(`
+    INSERT INTO scenario_state (scenario_id, context_json) VALUES (?, ?)
+    ON CONFLICT (scenario_id) DO UPDATE SET context_json = excluded.context_json
+  `).run(scenarioId, JSON.stringify(context));
+}
+
+/** Load the saved context for a scenario (for resume), or null. */
+export function loadScenarioContext(scenarioId: string): Record<string, string> | null {
+  const d = getDb();
+  const row = d.prepare(`
+    SELECT context_json FROM scenario_state WHERE scenario_id = ?
+  `).get(scenarioId) as { context_json: string } | undefined;
+  return row ? JSON.parse(row.context_json) : null;
 }
 
 /** Return all thread records for a scenario, ordered by step. */

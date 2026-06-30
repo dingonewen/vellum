@@ -1,7 +1,7 @@
 import { createNylasClient } from '../src/nylas/nylasClient';
 import type { EmailAttachment } from '../src/nylas/client';
 import { BUYER, SELLER } from './persona';
-import { insertThreadRecord, getLatestStep, getStepRecord, resetState } from './db';
+import { insertThreadRecord, getLatestStep, getStepRecord, resetState, saveScenarioContext, loadScenarioContext } from './db';
 import type { Scenario, ScenarioContext, RunOptions, DelaySpec } from './types';
 
 const nylasClient = createNylasClient();
@@ -188,7 +188,15 @@ async function runSteps(
   options: RunOptions,
   parentContext?: ScenarioContext,
 ): Promise<void> {
-  let context: ScenarioContext = { ...(parentContext ?? scenario.initialContext) };
+  // Load saved context on resume, or use initial + save it on first run
+  let context: ScenarioContext;
+  const saved = loadScenarioContext(scenario.id);
+  if (saved) {
+    context = { ...scenario.initialContext, ...saved };
+  } else {
+    context = { ...(parentContext ?? scenario.initialContext) };
+    saveScenarioContext(scenario.id, context);
+  }
   let previousMessageId: string | null = null;
 
   // In dry-run mode, track message IDs in-memory so threading works without DB
@@ -236,6 +244,9 @@ async function runSteps(
       const result = await executeStep(scenario, i, context, previousMessageId, isDryRun);
       context = result.context;
       previousMessageId = result.messageId;
+      if (!isDryRun) {
+        saveScenarioContext(scenario.id, context);
+      }
       if (isDryRun) {
         dryRunMessageIds.set(i, result.messageId);
       }
