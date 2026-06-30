@@ -4,9 +4,11 @@ import { BUYER, SELLER } from './persona';
 import { insertThreadRecord, getLatestStep, getStepRecord, resetState, saveScenarioContext, loadScenarioContext } from './db';
 import type { Scenario, ScenarioContext, RunOptions, DelaySpec } from './types';
 
-const nylasClient = createNylasClient();
+const nylasClient = createNylasClient();  // create an entry point for Nylas API
 
 // ── Template substitution ────────────────────────────────────────────
+// Find all instances of ${xxx}, look up xxx in the context dictionary, 
+// and if found, replace it with the corresponding value
 
 function resolveTemplate(template: string, context: ScenarioContext): string {
   return template.replace(/\$\{(\w+)\}/g, (_, key: string) =>
@@ -15,6 +17,7 @@ function resolveTemplate(template: string, context: ScenarioContext): string {
 }
 
 // ── Delay resolution ─────────────────────────────────────────────────
+// translate delaySeconds in po-processing.ts into milliseconds
 
 function resolveDelay(spec: DelaySpec): number {
   if (typeof spec === 'number') return spec * 1000;
@@ -23,6 +26,8 @@ function resolveDelay(spec: DelaySpec): number {
 }
 
 // ── Load a scenario by ID ────────────────────────────────────────────
+// Dynamically loaded at runtime based on parameters—po-processing → ./scenarios/po-processing.js. 
+// So, to add new scenarios in the future, simply create a new file; no code changes are required.
 
 async function loadScenario(scenarioId: string): Promise<Scenario> {
   try {
@@ -84,6 +89,9 @@ async function findRecipientMessageId(
 }
 
 // ── Send one step ────────────────────────────────────────────────────
+// Return Type—This function does not return a result immediately; instead, 
+// it returns a Promise that will, upon resolution, provide you with an object 
+// containing a `messageId` (string) and a `context` (ScenarioContext).
 
 async function executeStep(
   scenario: Scenario,

@@ -31,12 +31,12 @@ export interface AttachmentSpec {
 export interface ScenarioStep {
   senderId: 'buyer' | 'seller';
   /** undefined = new thread root; number = reply to that step index */
-  replyToStepIndex?: number;
+  replyToStepIndex?: number;  // step 0 doesn't need to reply
   subjectTemplate: string;
   bodyTemplate: string;      // HTML body, ${variable} placeholders
   delaySeconds: DelaySpec;
   /** Step-specific variable overrides merged into context for future steps */
-  variables?: Record<string, string>;
+  variables?: Record<string, string>;   // == { [key: string]: string } only randomize number in step 0 but can be used for more scenarios
   /** Optional attachments (resolved from templates, sent with the email) */
   attachments?: AttachmentSpec[];
 }
