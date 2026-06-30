@@ -40,6 +40,7 @@ if (!scenarioId) {
   console.error('');
   console.error('Options:');
   console.error('  --dry-run           Print emails without sending');
+  console.error('  --fast              Override all delays to 0 (demo mode)');
   console.error('  --from-step N       Resume from step N');
   console.error('  --max-steps N       Stop after N steps');
   console.error('  --loop              Re-run continuously (new thread each loop)');
@@ -52,6 +53,7 @@ if (!scenarioId) {
 const options: RunOptions = {
   scenarioId,
   dryRun: hasArg('--dry-run'),
+  fast: hasArg('--fast'),
   loop: hasArg('--loop'),
   startFromStep: getArg('--from-step') !== undefined
     ? parseInt(getArg('--from-step')!, 10)

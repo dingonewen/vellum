@@ -65,9 +65,10 @@ export interface ThreadRecord {
 // ── Engine run options ───────────────────────────────────────────────
 export interface RunOptions {
   scenarioId: string;
-  startFromStep?: number;    // resume from here; default: auto-detect from DB
+  startFromStep?: number;
   maxSteps?: number;
   dryRun?: boolean;
-  loop?: boolean;            // re-run continuously with fresh variables
-  loopIntervalMinutes?: number; // wait between loops (default 30)
+  fast?: boolean;              // override all delays to 0 (demo mode)
+  loop?: boolean;
+  loopIntervalMinutes?: number;
 }

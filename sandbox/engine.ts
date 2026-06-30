@@ -176,7 +176,8 @@ export async function runScenario(options: RunOptions): Promise<void> {
   console.log(`\n╔══════════════════════════════════════════════════════════════╗`);
   console.log(`║  Scenario: ${scenario.name.padEnd(51)}║`);
   console.log(`║  Steps:    ${String(startStep + 1)}–${String(Math.min(options.maxSteps ? startStep + options.maxSteps : scenario.steps.length, scenario.steps.length))} of ${scenario.steps.length}`.padEnd(65) + '║');
-  console.log(`║  Mode:     ${(options.dryRun ? 'DRY RUN' : 'LIVE').padEnd(51)}║`);
+  const modeLabel = options.dryRun ? 'DRY RUN' : options.fast ? 'LIVE (FAST)' : 'LIVE';
+  console.log(`║  Mode:     ${modeLabel.padEnd(51)}║`);
   console.log(`╚══════════════════════════════════════════════════════════════╝\n`);
 
   await runSteps(scenario, startStep, options);
@@ -229,9 +230,9 @@ async function runSteps(
       previousMessageId = null; // new thread
     }
 
-    // Apply delay — skip in dry-run mode
+    // Apply delay — skip in dry-run and fast mode
     const isFirstInBatch = i === startStep;
-    if (!isFirstInBatch && !isDryRun) {
+    if (!isFirstInBatch && !isDryRun && !options.fast) {
       const delayMs = resolveDelay(step.delaySeconds);
       const delayLabel = typeof step.delaySeconds === 'number'
         ? `${step.delaySeconds}s`
