@@ -58,7 +58,7 @@ async function findRecipientMessageId(
   sentAt: number,
 ): Promise<string | null> {
   const since = Math.floor(sentAt / 1000) - 30; // look back 30s before send
-  const maxTries = 6;
+  const maxTries = 12;
   const pollMs = 5000;
 
   for (let attempt = 0; attempt < maxTries; attempt++) {
@@ -213,8 +213,9 @@ async function runSteps(
       } else {
         const parentRecord = getStepRecord(scenario.id, step.replyToStepIndex);
         // recipient_message_id is the message ID in the RESPONDER's grant —
-        // exactly what we need for replyToMessageId
-        previousMessageId = parentRecord?.recipient_message_id ?? parentRecord?.sent_message_id ?? null;
+        // exactly what we need for replyToMessageId. Do NOT fall back to
+        // sent_message_id across grants (it belongs to the other persona).
+        previousMessageId = parentRecord?.recipient_message_id ?? null;
       }
     } else {
       previousMessageId = null; // new thread
