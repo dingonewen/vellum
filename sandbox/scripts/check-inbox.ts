@@ -4,11 +4,11 @@
  * Useful for verifying that sent sandbox emails actually arrived.
  *
  * Usage:
- *   npx tsx sandbox/scripts/check-inbox.ts <buyer|seller> [limit]
+ *   npx tsx sandbox/scripts/check-inbox.ts <primary|cloud> [limit]
  *
  * Examples:
- *   npx tsx sandbox/scripts/check-inbox.ts seller    — Tifa's inbox, last 5 messages
- *   npx tsx sandbox/scripts/check-inbox.ts buyer 10   — Cloud's inbox, last 10 messages
+ *   npx tsx sandbox/scripts/check-inbox.ts primary    — Tifa's inbox, last 5
+ *   npx tsx sandbox/scripts/check-inbox.ts cloud 10    — Cloud's inbox, last 10
  */
 
 import 'dotenv/config';
@@ -16,10 +16,10 @@ import { createNylasClient } from '../../src/nylas/nylasClient';
 import { PERSONAS } from '../persona';
 
 const role = process.argv[2]?.toLowerCase();
-if (!role || !['buyer', 'seller'].includes(role)) {
-  console.error('Usage: npx tsx sandbox/scripts/check-inbox.ts <buyer|seller> [limit]');
-  console.error('  buyer  = Cloud (supplier)');
-  console.error('  seller = Tifa (procurement manager)');
+if (!role || !['primary', 'cloud'].includes(role)) {
+  console.error('Usage: npx tsx sandbox/scripts/check-inbox.ts <primary|cloud> [limit]');
+  console.error('  primary = Tifa Lockhart (buyer — product inbox, Gmail)');
+  console.error('  cloud   = Cloud Strife (supplier, Outlook)');
   process.exit(1);
 }
 

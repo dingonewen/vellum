@@ -5,40 +5,43 @@ function requireEnv(key: string): string {
   if (!value) {
     throw new Error(
       `Missing environment variable: ${key}. ` +
-      `Add it to your .env file with the Nylas-authenticated Gmail account details.`
+      `Add it to your .env file with the Nylas-authenticated account details.`
     );
   }
   return value;
 }
 
-const buyerEmail = requireEnv('SANDBOX_BUYER_EMAIL');
-const buyerGrantId = requireEnv('SANDBOX_BUYER_GRANT_ID');
-const sellerEmail = requireEnv('SANDBOX_SELLER_EMAIL');
-const sellerGrantId = requireEnv('SANDBOX_SELLER_GRANT_ID');
-
 /**
- * Persona mapping:
- *   BUYER  account (SANDBOX_BUYER_*)  = Cloud   — supplier / sales rep
- *   SELLER account (SANDBOX_SELLER_*) = Tifa    — procurement manager
+ * Persona layout:
+ *   PRIMARY  account = Tifa Lockhart — the buyer whose inbox is the product.
+ *                      Receives PO acknowledgements, updates, exceptions, and spam.
+ *                      Gmail, no throttling — fast demo friendly.
+ *   CLOUD    account = Cloud Strife — supplier #1 (Outlook). Sends on tight
+ *                      PO, then delays, QC failures, and eventual resolution.
  *
- * In PO scenarios Tifa (SELLER) initiates by sending the purchase order;
- * Claude (BUYER) responds with confirmations, delay notices, and delivery updates.
+ * Additional suppliers (for mixed-inbox scenarios) are loaded as needed.
  */
-export const BUYER: Persona = {
-  id: 'buyer',
-  name: 'Cloud Strife',
-  email: buyerEmail,
-  grantId: buyerGrantId,
-};
+const primaryEmail = requireEnv('SANDBOX_PRIMARY_EMAIL');
+const primaryGrantId = requireEnv('SANDBOX_PRIMARY_GRANT_ID');
+const cloudEmail = requireEnv('SANDBOX_CLOUD_EMAIL');
+const cloudGrantId = requireEnv('SANDBOX_CLOUD_GRANT_ID');
 
-export const SELLER: Persona = {
-  id: 'seller',
+export const PRIMARY: Persona = {
+  id: 'primary',
   name: 'Tifa Lockhart',
-  email: sellerEmail,
-  grantId: sellerGrantId,
+  email: primaryEmail,
+  grantId: primaryGrantId,
 };
 
+export const CLOUD: Persona = {
+  id: 'cloud',
+  name: 'Cloud Strife',
+  email: cloudEmail,
+  grantId: cloudGrantId,
+};
+
+/** Map persona id → Persona for quick senderId lookup. */
 export const PERSONAS: Record<string, Persona> = {
-  buyer: BUYER,
-  seller: SELLER,
+  primary: PRIMARY,
+  cloud: CLOUD,
 };

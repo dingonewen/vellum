@@ -49,7 +49,7 @@ for (const [key, msgs] of threadsByGroup) {
   console.log(`┌─ Conversation: "${sorted[0].subject.replace(/^Re:\s*/i, '').slice(0, 80)}"`);
   for (const m of sorted) {
     const date = new Date(m.sent_at).toLocaleString();
-    const sender = m.sender_id === 'buyer' ? 'Cloud' : 'Tifa';
+    const sender = m.sender_id === 'primary' ? 'Tifa' : 'Cloud';
     console.log(`│  [${String(m.step_index).padStart(2)}] ${sender.padEnd(6)} ${date}  ${m.subject.slice(0, 70)}`);
   }
   console.log(`└─ ${msgs.length} messages\n`);

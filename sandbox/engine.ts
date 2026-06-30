@@ -1,6 +1,6 @@
 import { createNylasClient } from '../src/nylas/nylasClient';
 import type { EmailAttachment } from '../src/nylas/client';
-import { BUYER, SELLER } from './persona';
+import { PRIMARY, CLOUD } from './persona';
 import { insertThreadRecord, getLatestStep, getStepRecord, resetState, saveScenarioContext, loadScenarioContext } from './db';
 import type { Scenario, ScenarioContext, RunOptions, DelaySpec } from './types';
 
@@ -101,8 +101,8 @@ async function executeStep(
   dryRun: boolean,
 ): Promise<{ messageId: string; context: ScenarioContext }> {
   const step = scenario.steps[stepIndex];
-  const persona = step.senderId === 'buyer' ? BUYER : SELLER;
-  const recipient = step.senderId === 'buyer' ? SELLER : BUYER;
+  const persona = step.senderId === 'primary' ? PRIMARY : CLOUD;
+  const recipient = step.senderId === 'primary' ? CLOUD : PRIMARY;
 
   // Merge step-specific variables into context
   const mergedContext: ScenarioContext = { ...context, ...(step.variables ?? {}) };

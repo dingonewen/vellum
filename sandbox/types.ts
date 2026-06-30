@@ -1,6 +1,6 @@
 // ── Persona ──────────────────────────────────────────────────────────
 export interface Persona {
-  id: 'buyer' | 'seller';
+  id: 'primary' | 'cloud';  // primary = Tifa (product inbox), cloud = Cloud (supplier)
   name: string;
   email: string;
   grantId: string; // Nylas grant ID
@@ -8,11 +8,11 @@ export interface Persona {
 
 // ── Variable context (accumulates across steps) ──────────────────────
 export interface ScenarioContext {
-  buyer_name: string;
-  seller_name: string;
-  buyer_email: string;
-  seller_email: string;
-  [key: string]: string; // extensible — scenarios add product, price, etc.
+  primary_name: string;       // Tifa — the buyer whose inbox is the product
+  cloud_name: string;         // Cloud — supplier (or the supplier persona for this scenario)
+  primary_email: string;
+  cloud_email: string;
+  [key: string]: string;      // extensible — scenarios add supplier_name_2, po_number, etc.
 }
 
 // ── Delay specification ──────────────────────────────────────────────
@@ -29,14 +29,14 @@ export interface AttachmentSpec {
 
 // ── One step in a scenario ───────────────────────────────────────────
 export interface ScenarioStep {
-  senderId: 'buyer' | 'seller';
+  senderId: 'primary' | 'cloud';  // which persona sends this step
   /** undefined = new thread root; number = reply to that step index */
-  replyToStepIndex?: number;  // step 0 doesn't need to reply
+  replyToStepIndex?: number;
   subjectTemplate: string;
   bodyTemplate: string;      // HTML body, ${variable} placeholders
   delaySeconds: DelaySpec;
   /** Step-specific variable overrides merged into context for future steps */
-  variables?: Record<string, string>;   // == { [key: string]: string } only randomize number in step 0 but can be used for more scenarios
+  variables?: Record<string, string>;
   /** Optional attachments (resolved from templates, sent with the email) */
   attachments?: AttachmentSpec[];
 }
@@ -56,7 +56,7 @@ export interface ThreadRecord {
   threadId: string;          // Nylas first-message ID (thread anchor)
   scenarioId: string;
   stepIndex: number;
-  senderId: 'buyer' | 'seller';
+  senderId: 'primary' | 'cloud';
   sentMessageId: string;     // Nylas message ID returned after send
   subject: string;
   sentAt: number;            // Unix ms timestamp
