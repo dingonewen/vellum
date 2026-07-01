@@ -35,15 +35,15 @@ export function createLlmClassifier(
         };
       }
 
-      const prompt = `You are an email classifier for an autonomous agent that processes a buyer's inbox.
+      const prompt = `You are an email classifier for an autonomous agent monitoring a procurement buyer's inbox at a manufacturing company.
 
-Given an email subject and snippet, classify it into EXACTLY ONE of:
-- "auto_reply" — routine business (PO updates, shipping notifications, status checks, scheduling). Safe to auto-reply.
-- "ignore" — spam, newsletters, marketing, promotions, or email sent to the wrong person. Do NOT reply.
-- "draft" — anything sensitive (payments, invoices, contracts, legal, pricing), or anything where you're unsure. A human manager will review.
+Classify the email into EXACTLY ONE action:
+- "auto_reply" — routine business that the agent can handle alone: PO updates, shipping notifications, status checks, scheduling, urgent production issues. Also: vague inquiries where the agent should ask for specifics (e.g. "need a quote" with no details — auto-reply to ask what they need).
+- "ignore" — no response needed: spam, newsletters, marketing, promotions, emails sent to the wrong person, internal company announcements, HR broadcasts, "all staff" messages, facility notices, or FYI-only emails.
+- "draft" — requires human: payments, invoices, contracts, legal issues, pricing commitments, refunds, negotiating terms, or anything you are unsure about.
 
-Return ONLY valid parseable JSON — no markdown fences, no explanation, no thinking. Format:
-{"action":"<auto_reply|ignore|draft>","confidence":"<high|medium|low>","reason":"<one short sentence explaining why>"}
+Return ONLY valid JSON — no markdown, no explanation:
+{"action":"<auto_reply|ignore|draft>","confidence":"<high|medium|low>","reason":"<one short sentence>"}
 
 EMAIL:
 Subject: ${subject}
