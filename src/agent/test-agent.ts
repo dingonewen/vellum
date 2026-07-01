@@ -2,18 +2,14 @@ import 'dotenv/config';
 import { createNylasClient } from '../nylas/nylasClient';
 import { createAgent, createMemoryDraftStore, createLlmClassifier, createLlmReplyGenerator } from './index';
 
-import BetterSqlite3 from 'better-sqlite3';
-import * as path from 'path';
+import { resolveGrant } from './db';
 
 const apiKey = process.env.ANTHROPIC_API_KEY || '';
 const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.deepseek.com/anthropic';
 const model = 'deepseek-v4-flash';
 
 // Resolve Tifa's grant from DB
-const dbPath = path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/vellum.db');
-const db = new BetterSqlite3(dbPath, { readonly: true });
-const buyer = db.prepare("SELECT grant_id FROM grants WHERE mailbox_type = 'buyer_inbox' LIMIT 1").get() as { grant_id: string } | undefined;
-db.close();
+const buyer = resolveGrant('buyer_inbox');
 if (!buyer) { console.error('No buyer_inbox configured in DB. Set one via http://localhost:3000'); process.exit(1); }
 const grantId = buyer.grant_id;
 

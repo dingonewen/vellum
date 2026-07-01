@@ -112,6 +112,8 @@ export function createAgent(options: AgentOptions): Agent {
         senderEmail,
         draft.subject,
         draft.body,
+        undefined,             // no attachments
+        email.id,              // replyToMessageId — keeps replies in the same thread
       );
       console.log(`  [AGENT] Auto-replied: "${email.subject}" → ${senderEmail} (msgId: ${result.messageId})`);
       return {

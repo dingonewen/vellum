@@ -14,8 +14,9 @@
     "sandbox:reset": "npx tsx sandbox/scripts/reset.ts",
     "sandbox:inbox": "npx tsx sandbox/scripts/check-inbox.ts",
     "agent:test": "npx tsx src/agent/test-agent.ts",
-    "agent:tifa": "npx tsx src/agent/daemon.ts",
-    "agent:cloud": "npx tsx src/agent/daemon-cloud.ts",
+    "agent:tifa": "npx tsx src/agent/daemon.ts --persona=tifa",
+    "agent:cloud": "npx tsx src/agent/daemon.ts --persona=cloud",
+    "agent:all": "npx tsx src/agent/daemon.ts --persona=all",
     "demo": "npx tsx src/agent/demo.ts"
   },
   "repository": {

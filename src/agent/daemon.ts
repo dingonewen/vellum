@@ -1,103 +1,56 @@
-import 'dotenv/config';
-import { createNylasClient } from '../nylas/nylasClient';
-import { createAgent, createMemoryDraftStore, createLlmClassifier, createLlmReplyGenerator, buildDigestHtml, shouldSendDigest } from './index';
+/**
+ * Unified agent daemon CLI.
+ *
+ * Usage:
+ *   npx tsx src/agent/daemon.ts --persona tifa
+ *   npx tsx src/agent/daemon.ts --persona cloud
+ *   npx tsx src/agent/daemon.ts --persona all
+ *
+ * Env vars:
+ *   AGENT_POLL_SECONDS        — poll interval (default: 5)
+ *   MANAGER_DIGEST_FREQUENCY  — on_sensitive | every_6h | daily_4pm
+ *   ANTHROPIC_API_KEY         — LLM API key
+ *   ANTHROPIC_BASE_URL        — LLM base URL (default: DeepSeek)
+ *   DATABASE_PATH             — path to vellum.db
+ */
+import { PERSONAS, type PersonaConfig } from './personas';
+import { startDaemon } from './daemon-runner';
 import type { DigestFrequency } from './managerDigest';
 
-const apiKey = process.env.ANTHROPIC_API_KEY || '';
-const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.deepseek.com/anthropic';
-const model = 'deepseek-v4-flash';
+// ── CLI arg parsing ──────────────────────────────────────────────────
 
-const nylas = createNylasClient();
-const draftStore = createMemoryDraftStore();
+function parseArgs(): { personas: PersonaConfig[] } {
+  const args = process.argv.slice(2);
+  const personaArg = args.find(a => a.startsWith('--persona='));
+  const raw = personaArg?.split('=')[1]?.toLowerCase() ?? 'tifa';
 
-// Resolve personas from DB by mailbox_type
-import BetterSqlite3 from 'better-sqlite3';
-import * as path from 'path';
-const dbPath = path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/vellum.db');
-
-function resolveGrant(type: string) {
-  const db = new BetterSqlite3(dbPath, { readonly: true });
-  const row = db.prepare('SELECT grant_id, email FROM grants WHERE mailbox_type = ? LIMIT 1').get(type) as { grant_id: string; email: string } | undefined;
-  db.close();
-  return row;
-}
-
-const buyer = resolveGrant('buyer_inbox');
-const manager = resolveGrant('manager_inbox');
-
-if (!buyer) {
-  console.error('No buyer_inbox configured. Set one via http://localhost:3000');
-  process.exit(1);
-}
-
-const managerEmail = manager?.email ?? buyer.email;
-const managerGrantId = manager?.grant_id ?? buyer.grant_id; // fallback: send to self
-
-const agent = createAgent({
-  nylasClient: nylas,
-  grantId: buyer.grant_id,
-  classifier: createLlmClassifier(apiKey, baseUrl, model),
-  replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model, 'Tifa Lockhart', 'a procurement manager at Shinra Manufacturing'),
-  draftStore,
-});
-
-const POLL_SECONDS = parseInt(process.env.AGENT_POLL_SECONDS || '5', 10);
-const processedIds = new Set<string>();
-let autoCount = 0, ignoreCount = 0, draftCount = 0;
-let lastDigestSent: number | null = null;
-
-const digestFrequency: DigestFrequency = (process.env.MANAGER_DIGEST_FREQUENCY as DigestFrequency) || 'on_sensitive';
-
-console.log(`🤖 Agent daemon started — watching ${buyer.email} every ${POLL_SECONDS}s`);
-console.log(`   Manager digest: ${managerEmail} (${digestFrequency})`);
-console.log(`   Model: ${model} @ ${baseUrl}\n`);
-
-async function tick() {
-  try {
-    const since = Math.floor(Date.now() / 1000) - POLL_SECONDS * 2;
-    const page = await nylas.listMessages(buyer!.grant_id, { sinceTimestamp: since, limit: 5, unreadOnly: true });
-
-    for (const email of page.messages) {
-      if (processedIds.has(email.id)) continue;
-      if (email.sender.email === buyer!.email) continue; // skip own mail
-      if (email.subject.toLowerCase().includes('delivery status')) continue;
-      processedIds.add(email.id);
-
-      const result = await agent.process(email);
-      const t = result.action.type;
-      if (t === 'auto_replied' || t === 'not_sent') autoCount++;
-      else if (t === 'ignored') ignoreCount++;
-      else draftCount++;
-
-      const icon = t === 'auto_replied' ? '✅' : t === 'ignored' ? '🗑️' : '📝';
-      console.log(`${icon} [${t}] ${email.subject.slice(0, 70)}`);
-
-      // Send manager digest if a draft was queued and frequency says now
-      if (t === 'drafted' && shouldSendDigest(digestFrequency, lastDigestSent, true)) {
-        const drafts = draftStore.list();
-        const html = buildDigestHtml(drafts, autoCount, ignoreCount);
-        try {
-          await nylas.sendMessage(
-            managerGrantId!,
-            managerEmail,
-            `📋 Agent Digest — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-            html,
-          );
-          lastDigestSent = Date.now();
-          console.log(`  📬 Digest sent to ${managerEmail} (${drafts.length} draft(s))`);
-        } catch (e) {
-          console.error('  ⚠ Failed to send digest:', (e as Error).message);
-        }
-      }
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!msg.includes('429') && !msg.includes('timeout')) {
-      console.error('  ⚠', msg);
-    }
+  if (raw === 'all') {
+    return { personas: Object.values(PERSONAS) };
   }
+
+  const cfg = PERSONAS[raw];
+  if (!cfg) {
+    console.error(`Unknown persona: "${raw}". Valid: ${Object.keys(PERSONAS).join(', ')}, all`);
+    process.exit(1);
+  }
+
+  return { personas: [cfg] };
 }
 
-// First run, then poll
-tick();
-setInterval(tick, POLL_SECONDS * 1000);
+// ── Main ─────────────────────────────────────────────────────────────
+
+const { personas } = parseArgs();
+const pollSeconds = parseInt(process.env.AGENT_POLL_SECONDS || '5', 10);
+const digestFrequency: DigestFrequency =
+  (process.env.MANAGER_DIGEST_FREQUENCY as DigestFrequency) || 'on_sensitive';
+
+const handles = personas.map(p =>
+  startDaemon({ persona: p, pollSeconds, digestFrequency }),
+);
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log(`\n👋 Shutting down ${handles.map(h => h.label).join(' + ')}...`);
+  for (const h of handles) clearInterval(h.timer);
+  process.exit(0);
+});
