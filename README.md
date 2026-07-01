@@ -1,53 +1,46 @@
 # Vellum
 
-An AI inbox digest service. Connects to your mailboxes via Nylas, watches for incoming email via webhook, and periodically delivers an AI-written summary so you can skip the firehose.
+An autonomous email agent with a built-in integration testing sandbox. Connects to real mailboxes via Nylas, processes incoming mail through a classify → reply pipeline, and simulates multi-persona conversation threads for regression testing.
 
-Multi-tenant by design: one user can connect multiple mailboxes. Bring your own LLM key — Anthropic, Gemini, or OpenAI.
-
-**Demo (prototype):** https://youtu.be/iU5g4-ytwSI
-
-> *The clip above shows an earlier prototype. The current interface uses Vellum's parchment-style design:*
-
-![Current UI](public/screenshot.jpg)
-
-*Early prototype walkthrough:*
-
-![Prototype Demo](public/demo.gif)
+Dual-architecture: the **Agent** handles real inboxes autonomously; the **Sandbox** generates labeled training data and verifies agent behavior. LLM-powered via DeepSeek (rule-based fallback available, no API key required for sandbox-only use).
 
 ---
 
 ## Architecture
 
-A single Express + TypeScript server with SQLite for persistence and node-cron for scheduling. No separate services or queues required — the DB is the source of truth for everything durable.
-
 ```
-Browser → GET /           → Web UI (connect mailboxes + configure digest)
-Browser → /auth/connect   → Nylas hosted OAuth → /auth/callback → user + grant stored in SQLite
-Nylas   → POST /webhooks/nylas → HMAC verified → messageId enqueued → async processor fetches + stores
-node-cron (every 1 min)   → claimDue() → InboxReader (all grants) → LLM Summarizer → EmailSender → digest sent
+┌─────────────────────────────────────────────────────┐
+│                     V ELLUM                          │
+│                                                      │
+│  ┌──────────────┐       ┌──────────────────────────┐ │
+│  │   S A N D B O X │       │   A G E N T               │ │
+│  │   (testing tool) │       │   (production engine)     │ │
+│  │                  │       │                           │ │
+│  │  Scenario .ts ───┤       │  Incoming email ──► classify│
+│  │  Engine ───► Nylas│      │    ├─ ignore (spam)        │ │
+│  │  DB ──► resume   │       │    ├─ auto_reply (send)    │ │
+│  │                  │       │    └─ draft (manager queue)│ │
+│  │  Generates data ──┼───────► Trains & validates agent  │ │
+│  └──────────────┘       └──────────────────────────┘ │
+│                                                      │
+│  Shared: NylasClient · SQLite · LLM (DeepSeek)        │
+└─────────────────────────────────────────────────────┘
 ```
 
-Sessions are cookie-based (30-day TTL, stored in SQLite). A user may connect multiple mailboxes; all are aggregated into a single digest.
+**Sandbox** generates realistic multi-persona email threads. Used during development to create labeled training data, during CI to verify the agent hasn't regressed, and for demos.
+
+**Agent** processes a real inbox: classifies every incoming email, auto-replies to routine business, ignores spam, and queues sensitive items for human review. A daily digest summarizes pending approvals.
+
+Both share the same `NylasClient` abstraction and `Agent` pipeline — you can run the agent against live mail or replay Sandbox scenarios to verify its behavior.
 
 ---
 
 ## Prerequisites
 
 - Node.js 20+
-- A [Nylas](https://nylas.com) account (free tier is enough)
-- An API key from one of: [Anthropic](https://console.anthropic.com), [Google AI Studio](https://aistudio.google.com), or [OpenAI](https://platform.openai.com)
-- A server with a public HTTPS URL (for webhook delivery and OAuth callbacks)
-
----
-
-## Nylas App Setup (from scratch)
-
-1. Sign up at [dashboard.nylas.com](https://dashboard.nylas.com)
-2. Create a new application
-3. Note your **API Key** and **Client ID** from the app settings
-4. Under **OAuth → Callback URIs**, add your public callback URL (e.g. `https://your-domain/auth/callback`)
-5. Under **Connectors**, enable the email providers you want to support (Google, Microsoft, etc.)
-6. Under **Webhooks**, add a webhook pointing at `https://your-domain/webhooks/nylas` with trigger `message.created` — copy the **signing secret** shown after creation
+- A [Nylas](https://nylas.com) account (free tier works)
+- Two email accounts with Nylas OAuth grants (Gmail + Outlook tested)
+- A [DeepSeek API key](https://platform.deepseek.com) for LLM-powered agent mode (optional — rule-based fallback works without it)
 
 ---
 
@@ -58,10 +51,10 @@ git clone https://github.com/dingonewen/vellum.git
 cd vellum
 npm install
 cp .env.example .env
-# fill in .env with your keys
+# fill in .env with your keys (see below)
 ```
 
-> **Note (Ubuntu / Node 20+):** `better-sqlite3` is a native module. If `npm install` fails with an ABI mismatch error, rebuild it from source:
+> **Ubuntu / Node 20+:** `better-sqlite3` is a native module. If `npm install` fails with an ABI error:
 > ```bash
 > sudo apt-get install -y build-essential python3
 > npm install better-sqlite3 --build-from-source
@@ -71,230 +64,194 @@ cp .env.example .env
 
 | Variable | Description |
 |----------|-------------|
-| `NYLAS_API_KEY` | Nylas API key (also used as client secret for OAuth code exchange) |
+| `NYLAS_API_KEY` | Nylas API key (doubles as OAuth client secret) |
 | `NYLAS_CLIENT_ID` | Nylas OAuth client ID |
-| `NYLAS_WEBHOOK_SECRET` | Signing secret from Nylas webhook settings (optional at startup, required for webhook delivery) |
 | `NYLAS_API_URI` | Nylas API base URL (default: `https://api.us.nylas.com`) |
-| `APP_BASE_URL` | Public base URL of this server (e.g. `https://vellum-mail.up.railway.app`) |
-| `CALLBACK_URL` | Full OAuth callback URL — must match what's registered in Nylas Dashboard |
+| `APP_BASE_URL` | Public base URL for OAuth redirects |
+| `CALLBACK_URL` | Full OAuth callback URL |
 | `PORT` | HTTP port (default: `3000`) |
-| `DATABASE_PATH` | SQLite database file path (default: `./data/vellum.db`) |
+| `DATABASE_PATH` | SQLite DB path (default: `./data/vellum.db`) |
+| `ANTHROPIC_API_KEY` | DeepSeek API key (used by both Sandbox LLM and Agent LLM) |
+| `ANTHROPIC_MODEL` | Model ID (default: `deepseek-v4-pro`) |
+| `ANTHROPIC_BASE_URL` | API endpoint (`https://api.deepseek.com/anthropic`) |
+| `AGENT_API_KEY` | Agent-specific key (falls back to `ANTHROPIC_API_KEY`) |
+| `SANDBOX_PRIMARY_EMAIL` | Primary persona email (Tifa, Gmail — the product inbox) |
+| `SANDBOX_PRIMARY_GRANT_ID` | Nylas grant ID for primary persona |
+| `SANDBOX_CLOUD_EMAIL` | Cloud persona email (supplier, Outlook) |
+| `SANDBOX_CLOUD_GRANT_ID` | Nylas grant ID for Cloud persona |
 
-No server-side LLM key is required. Each user supplies their own API key through the web UI.
-
----
-
-## Running
-
-### Development (local)
-
-```bash
-npm run dev
-```
-
-For local OAuth to work, add `http://localhost:3000/auth/callback` to your Nylas Dashboard callback URIs.
-
-### Production — Railway (recommended)
-
-1. Connect your GitHub repo to [Railway](https://railway.app) → New Project → Deploy from GitHub
-2. Add a **Volume** mounted at `/data` for SQLite persistence
-3. Set environment variables in Railway → Variables (see table above)
-4. Railway auto-builds and deploys on every push — HTTPS is included
-
-The live instance runs at [vellum-mail.up.railway.app](https://vellum-mail.up.railway.app).
-
-### Production — Self-hosted (Linux VM)
-
-```bash
-npm run build
-pm2 start dist/server.js --name vellum
-pm2 save
-pm2 startup  # auto-start on reboot
-```
-
-Nylas requires HTTPS for OAuth callbacks and webhook endpoints. Use **Caddy + sslip.io**:
-
-- `sslip.io` is a free wildcard DNS service — `40-160-15-19.sslip.io` resolves to `40.160.15.19`
-- Caddy automatically obtains a Let's Encrypt certificate
-- No domain purchase or manual certificate management required
-
-```bash
-sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update && sudo apt install -y caddy
-
-sudo tee /etc/caddy/Caddyfile > /dev/null <<'EOF'
-YOUR-IP-WITH-DASHES.sslip.io {
-    reverse_proxy localhost:3000
-}
-EOF
-
-sudo systemctl restart caddy
-```
-
-Set `APP_BASE_URL` and `CALLBACK_URL` in `.env` to match the sslip.io hostname.
+**No LLM key is required for the Sandbox dry run or rule-based agent.** The LLM-powered classifier and reply generator need a DeepSeek key.
 
 ---
 
 ## Automated Integration Testing Sandbox
 
-The sandbox simulates real email conversations between two personas using their actual Gmail accounts (via Nylas). It generates chronological, contextual email threads for AI agent training and regression testing — no manual inbox clicking required.
+The Sandbox simulates real email conversations between personas using their actual email accounts via Nylas. It generates chronological, contextual, threaded email data for AI agent training, regression testing, and live demos.
 
-**Current scenario:** *PO Processing (14 steps)* — Tifa Lockhart (procurement manager at Shinra Manufacturing) sends a purchase order for precision bearings to Cloud Strife (sales rep at Nibelheim Precision Parts). Production delays, a QC failure, and escalating urgency drive a 14-email thread across two weeks, complete with PDF attachments.
+### Three Scenarios
+
+| Scenario | Steps | Description |
+|----------|-------|-------------|
+| `clean-po` | 3 | Supplier sends PO acknowledgement → buyer confirms → supplier ships. Clean, frictionless transaction. |
+| `po-processing` | 14 | Buyer sends PO → supplier confirms → delay → QC failure → escalation → partial shipment → resolution. Two PDF attachments inline. Exception-heavy. |
+| `mixed-inbox` | 6 (4 threads) | Clean PO update (replied), spam (ignored), wrong person (drafted for manager), sourcing inquiry (polite redirect). Trains the agent to distinguish reply-worthy from noise. |
 
 ### Quick Start
 
-1. **Set up two Gmail accounts** — buyer (Cloud, supplier) and seller (Tifa, procurement). Connect both via the Vellum OAuth flow (`/auth/connect`).
-
-2. **Add their Nylas grant IDs to `.env`:**
-
-```
-SANDBOX_BUYER_EMAIL=cloud.strife@gmail.com
-SANDBOX_BUYER_GRANT_ID=<nylas-grant-id-for-cloud>
-SANDBOX_SELLER_EMAIL=tifa.lockhart@gmail.com
-SANDBOX_SELLER_GRANT_ID=<nylas-grant-id-for-tifa>
-```
-
-3. **Dry run first** (preview without sending real emails):
-
 ```bash
+# Preview without sending
 npm run sandbox:dry
+
+# Live run — instant mode (no delays)
+npx tsx sandbox/scripts/run-scenario.ts clean-po --fast
+
+# Full scenario with realistic delays
+npx tsx sandbox/scripts/run-scenario.ts po-processing
+
+# Continuous generation (new thread every hour)
+npx tsx sandbox/scripts/run-scenario.ts mixed-inbox --loop --loop-interval 60
 ```
 
-4. **Run the full scenario:**
+### Testing Commands
+
+| Command | Purpose |
+|---------|---------|
+| `npm run sandbox:dry` | Dry run — print all emails without sending |
+| `npm run sandbox:run -- <id>` | Live run a scenario |
+| `npx tsx ... --fast` | Skip all delays (demo mode) |
+| `npx tsx ... --max-steps N` | Stop after N steps |
+| `npx tsx ... --from-step N` | Resume from step N after a crash |
+| `npm run sandbox:list` | Show all sent messages grouped by conversation |
+| `npm run sandbox:inbox -- primary` | Check Tifa's real inbox |
+| `npm run sandbox:reset` | Wipe state, start fresh |
+
+### How It Works
+
+1. A **scenario file** (TypeScript) defines personas, variables, and an ordered array of steps.
+2. The **engine** (`sandbox/engine.ts`) iterates through steps: resolves `${variable}` templates, sends via Nylas with proper `In-Reply-To` headers, polls the recipient's inbox to capture the cross-grant message ID, and persists state to SQLite after every step.
+3. Cross-grant threading (Gmail ↔ Outlook) works because the engine translates message IDs between Nylas grant contexts.
+4. On crash, `--from-step N` reloads the saved context (PO number, subject, etc.) and resumes from the exact breakpoint.
+
+### Writing a New Scenario
+
+Create `sandbox/scenarios/<name>.ts` exporting a `Scenario` object. The engine dynamically imports it — no other files need to change.
+
+---
+
+## Autonomous Email Agent
+
+The Agent processes a real inbox: classify → decide → act. Rule-based by default (zero dependencies); swap to LLM-powered when a DeepSeek key is configured.
+
+### Pipeline
+
+```
+Incoming email
+  │
+  ├─ sensitivity.ts    — hard-rule check: payment/contract/legal?
+  │
+  ├─ classifier.ts     — classify into one of three actions:
+  │    ├─ ignore           spam, newsletter, wrong person → do nothing
+  │    ├─ auto_reply       routine business (PO updates, shipping) → reply immediately
+  │    └─ draft_for_manager  sensitive or unclear → draft reply, queue for human
+  │
+  ├─ replyGenerator.ts — generate the reply body
+  │    rule-based: template-driven, conservative
+  │    LLM: natural, context-aware, model-swappable
+  │
+  └─ orchestrator.ts   — dispatches the action:
+       auto_reply → send via Nylas → log
+       draft      → store in memory → appear in daily digest
+       ignore     → log and skip
+```
+
+### Rule-Based Agent (no API key)
+
+```typescript
+import { createAgent, createMemoryDraftStore } from './src/agent';
+
+const agent = createAgent({ draftStore: createMemoryDraftStore() });
+const result = await agent.process(incomingEmail);
+// result.action.type: 'ignored' | 'auto_replied' | 'drafted'
+```
+
+### LLM-Powered Agent (DeepSeek)
+
+```typescript
+import {
+  createAgent, createMemoryDraftStore,
+  createLlmClassifier, createLlmReplyGenerator,
+} from './src/agent';
+import { config } from './src/config';
+
+const agent = createAgent({
+  nylasClient,           // from src/nylas/instance
+  grantId: config.SANDBOX_PRIMARY_GRANT_ID,
+  classifier: createLlmClassifier(config.AGENT_API_KEY, config.ANTHROPIC_BASE_URL),
+  replyGenerator: createLlmReplyGenerator(config.AGENT_API_KEY, config.ANTHROPIC_BASE_URL),
+  draftStore: createMemoryDraftStore(),
+});
+```
+
+### Manager Daily Digest
+
+Sensitive items are held for human review. A daily HTML digest lists every pending draft with the original email context and the agent's suggested reply.
+
+```typescript
+import { generateManagerDigest } from './src/agent';
+const digest = generateManagerDigest(agent.getDrafts());
+// → { subject: "📋 Agent Digest — Jun 30", htmlBody: "...", draftCount: 2 }
+```
+
+### Sensitivity Detection
+
+Hard rules catch what must never be auto-replied: wire transfers, payment terms, invoices, contract reviews, legal language, urgent meetings. These bypass the classifier entirely and go straight to the manager queue.
+
+### Module Structure
+
+```
+src/agent/
+  sensitivity.ts       — keyword-based sensitivity checker (11 patterns)
+  classifier.ts         — RuleClassifier: regex heuristics, zero-dependency
+  llmClassifier.ts      — LLM classifier via Anthropic SDK (DeepSeek-compatible)
+  replyGenerator.ts     — RuleReplyGenerator: template-driven, conservative
+  llmReplyGenerator.ts  — LLM reply generator (DeepSeek-compatible)
+  orchestrator.ts       — Agent pipeline: classify → reply → dispatch
+  managerDigest.ts      — HTML digest builder for pending approvals
+  index.ts              — unified exports
+```
+
+---
+
+## Legacy: Digest Service
+
+Vellum originally shipped an AI inbox digest (connect mailbox → cron reads → LLM summarizes → sends summary email). This feature is **paused** but the infrastructure remains:
+
+- OAuth flow (`src/routes/auth.ts`) for connecting new mailboxes
+- Webhook processing (`src/webhook/processor.ts`) for incoming mail ingestion
+- Scheduler + job runner (`src/scheduler/`, `src/orchestrator/`)
+- React Email templates, Gotenberg PDF generation
+
+The Agent module reuses `NylasClient`, summarizer interfaces, and the DB layer from the digest service. The Sandbox is fully independent.
+
+---
+
+## Development
 
 ```bash
-npm run sandbox:run -- po-processing
+npm run dev       # Start Express server with hot reload
+npm run build     # Compile TypeScript
+npm run lint      # ESLint
 ```
 
-### Testing Workflow
-
-| Step | Command | What it does |
-|------|---------|-------------|
-| Preview | `npm run sandbox:dry` | Print all 14 emails without sending — verify templates |
-| Smoke test | `npm run sandbox:run -- po-processing --max-steps 3` | Send first 3 emails, verify Inbox delivery |
-| Resume | `npm run sandbox:run -- po-processing --from-step 3` | Continue from step 3 after a crash |
-| Full run | `npm run sandbox:run -- po-processing` | Run entire 14-step thread |
-| Loop | `npm run sandbox:run -- po-processing --loop --loop-interval 60` | Generate new threads every hour |
-| Inspect | `npm run sandbox:list` | View all sent messages grouped by thread |
-| Verify | `npm run sandbox:inbox -- seller` | Check Tifa's inbox via Nylas API |
-| Reset | `npm run sandbox:reset` | Wipe state, start fresh |
-
-### What to Look For
-
-- **Threading:** Gmail groups all 14 emails into one conversation. Verify by opening either inbox — the full back-and-forth should appear as a single collapsed thread.
-- **Attachments:** Step 0 (PO) and Step 9 (QC Report) include PDF attachments generated inline.
-- **Chronology:** The urgency escalates naturally — friendly tone → slight concern → deadline panic → resolution and relationship repair.
-- **Crash recovery:** Kill the script mid-run and resume with `--from-step N` — it picks up from the last saved step.
-
-### Writing Custom Scenarios
-
-See `sandbox/README.md` for the scenario DSL and examples. Each scenario is a TypeScript file exporting a `Scenario` object with `initialContext` and an ordered `steps` array. Templates use `${variable}` substitution with context accumulated across steps.
+Connect mailboxes at `http://localhost:3000/auth/connect`. Grant IDs appear in the server log or can be queried from `SELECT * FROM grants`.
 
 ---
 
-## End-to-End Flow
+## Design Decisions
 
-### 1. Connect a mailbox
-
-Open `https://vellum-mail.up.railway.app` in a browser. Click **Connect a mailbox** — this redirects to Nylas hosted OAuth. After authorizing, you're returned to the setup page with the connected email shown.
-
-Connect as many mailboxes as you like. All will be aggregated into a single digest.
-
-Unhappy paths handled:
-- User denies consent → returned with an error message
-- State nonce expired or missing → rejected with 400
-- Code exchange fails → 502 with message
-
-### 2. Configure your digest
-
-Fill in:
-- **Deliver digest to** — the email address to receive digests
-- **Frequency** — a preset cadence (every minute / hourly / daily 8am / weekly Monday)
-- **AI provider** — Anthropic (Claude Haiku), Google (Gemini 2.0 Flash), or OpenAI (GPT-4o mini)
-- **API key** — your personal key for the chosen provider
-
-Click **Save & Schedule**. The confirmation shows which mailboxes are being watched and when the first dispatch arrives.
-
-### 3. Incoming mail is collected via webhook
-
-When a new email arrives, Nylas POSTs to `/webhooks/nylas`. The handler:
-1. Verifies the `x-nylas-signature` HMAC with `timingSafeEqual`
-2. Returns 200 immediately
-3. Enqueues the `messageId` into `pending_messages`
-
-A background processor polls every 5 seconds, claims a batch atomically, refetches each full message from Nylas (never trusts truncated webhook payloads), and upserts it into the `messages` table (`INSERT OR IGNORE` for deduplication).
-
-### 4. Scheduled digest is sent
-
-node-cron fires every minute and calls `claimDue()` — an atomic SQLite transaction that finds a due schedule and claims it. The job runner:
-1. Fetches messages since `last_summary_at` from **all connected mailboxes** (paginated, max 200 total)
-2. Merges and sorts them by arrival time
-3. Passes them to the user's chosen LLM summarizer
-4. Sends the styled HTML digest via Nylas to the destination address
-5. Updates `last_summary_at` and computes the next fire time
-
-If there are no new messages, the digest is skipped — no empty emails sent.
-
----
-
-## Design Decisions & Tradeoffs
-
-### Multi-tenant with session-based auth
-
-Each visitor who completes OAuth becomes a `user` (UUID, stored in SQLite). A session cookie (30-day TTL) ties subsequent visits to that user. Connecting another mailbox from the same browser session adds a second `grant` to the same user — all grants are aggregated at digest time.
-
-The `schedules` table is keyed on `user_id` (one schedule per user, not per mailbox), so cadence configuration is unified regardless of how many mailboxes are connected.
-
-### Scheduling: DB-backed atomic claim
-
-**Mechanism:** `node-cron` polls every minute. All schedule state (`next_fire_at`, `last_summary_at`, `claimed_at`) lives in SQLite.
-
-| Requirement | How |
-|-------------|-----|
-| Survives restart | `next_fire_at` is persisted in SQLite, not RAM |
-| Per-user | One row per `user_id` in `schedules` table |
-| Fires once | `UPDATE schedules SET claimed_at = ? WHERE claimed_at IS NULL AND next_fire_at <= ?` — only the process that wins proceeds |
-
-**Tradeoff:** SQLite's single-writer model means this scales to one process. For multi-instance deployments, PostgreSQL with `SELECT FOR UPDATE SKIP LOCKED` is the upgrade path.
-
-### Webhook deduplication
-
-Two layers:
-1. **Pending queue** — `pending_messages` table; duplicates are wasteful but harmless
-2. **Messages table** — `INSERT OR IGNORE INTO messages ... UNIQUE(message_id)`; the authoritative dedup
-
-Truncated payloads are handled by always refetching the full message from Nylas — webhook content is never trusted.
-
-### AI summarizer seam
-
-`assemblePrompt(messages)` and `parseResponse(text, count)` are pure functions with no I/O. They are shared across all three provider implementations. The `Summarizer` interface (`{ summarize(messages): Promise<SummaryResult> }`) is the only boundary the orchestrator depends on — stub it with a fixture for testing without any API key.
-
-Provider selection happens at job-run time based on the user's stored `llm_provider` field. All model names are centralized in `src/summarizer/models.ts` — one file to update if a model is deprecated.
-
-### External dependency interfaces
-
-All external calls (Nylas API, LLM APIs) are behind TypeScript interfaces (`NylasClient`, `Summarizer`, `EmailSender`, `InboxReader`). A live mailbox or API key is not required to test orchestration logic.
-
----
-
-## Assumptions
-
-- **First run lookback:** When no previous summary exists, the job fetches the last 24 hours of inbox.
-- **Max messages per summary:** Capped at 200 across all mailboxes to keep prompt size and latency bounded.
-- **OAuth state:** CSRF nonces are stored in an in-memory Map with a 10-minute TTL. They do not survive a process restart (acceptable — the user just re-clicks connect).
-- **Cadence as cron expression:** A standard 5-field cron expression. `cron-parser` computes `nextFireAt` from it.
-- **Primary sender:** When a user has multiple mailboxes, the digest is sent from the first connected mailbox (ordered by `created_at`).
-
----
-
-## What I'd Do With More Time
-
-- ✅ **Automated integration testing sandbox** — persona-driven email simulation with real Gmail accounts, 14-step PO processing scenario with PDF attachments, dry-run mode, crash recovery, and continuous loop generation (see [Sandbox Testing](#automated-integration-testing-sandbox))
-- **Unit tests** for `assemblePrompt`, `parseResponse`, `ScheduleStore.claimDue`, and `MessageStore.upsertMessage` using `initDb(":memory:")` fixtures
-- **Webhook retry handling** — exponential backoff with a retry counter instead of the current stale-claim TTL release
-- **Batch schedule claiming** — `claimDue()` claims one schedule per minute tick; a batch claim would be more efficient with many users
-- **OAuth state persistence** — store nonces in SQLite rather than an in-memory Map so they survive restarts
-- **Rate limiting** on the webhook endpoint to mitigate replay attacks beyond HMAC verification
-- **Encrypted key storage** — LLM API keys are currently stored in plaintext in SQLite; envelope encryption would be the right upgrade for a production deployment
+- **Dual-architecture:** Sandbox for testing, Agent for production. Same Nylas abstraction, separate engines. Changes to one don't break the other.
+- **Interface-driven LLM:** `Classifier` and `ReplyGenerator` are interfaces. Rule-based and LLM implementations are interchangeable — swap them in one line without touching the orchestrator.
+- **Cross-grant threading:** Nylas message IDs are grant-scoped. The Sandbox engine polls the recipient's inbox after every send to capture the cross-grant ID for proper `In-Reply-To` headers.
+- **Crash recovery:** Every step is persisted to a local SQLite DB immediately after sending. On restart, the engine reads the last completed step and resumes without regenerating variables.
+- **Zero-dependency PDF generation:** Sandbox attachments are generated as valid PDFs with no external library — the format is text, so we write objects and cross-reference tables by hand.
+- **Outlook throttling awareness:** The `po-processing` scenario uses 5–10 minute Cloud (Outlook) delays to avoid spam-detection freezes. Gmail (primary) delays are 0–2 minutes. `--fast` mode overrides all delays for demos.
