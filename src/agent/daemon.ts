@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { createNylasClient } from '../nylas/nylasClient';
-import { createAgent, createMemoryDraftStore, createLlmClassifier, createLlmReplyGenerator } from './index';
+import { createAgent, createMemoryDraftStore, createLlmClassifier, createLlmReplyGenerator, buildDigestHtml, shouldSendDigest } from './index';
+import type { DigestFrequency } from './managerDigest';
 
 const apiKey = process.env.ANTHROPIC_API_KEY || '';
 const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.deepseek.com/anthropic';
@@ -9,18 +10,28 @@ const model = 'deepseek-v4-flash';
 const nylas = createNylasClient();
 const draftStore = createMemoryDraftStore();
 
-// Resolve Tifa's grant from DB by mailbox_type
+// Resolve personas from DB by mailbox_type
 import BetterSqlite3 from 'better-sqlite3';
 import * as path from 'path';
 const dbPath = path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/vellum.db');
-const db = new BetterSqlite3(dbPath, { readonly: true });
-const buyer = db.prepare("SELECT grant_id, email FROM grants WHERE mailbox_type = 'buyer_inbox' LIMIT 1").get() as { grant_id: string; email: string } | undefined;
-db.close();
+
+function resolveGrant(type: string) {
+  const db = new BetterSqlite3(dbPath, { readonly: true });
+  const row = db.prepare('SELECT grant_id, email FROM grants WHERE mailbox_type = ? LIMIT 1').get(type) as { grant_id: string; email: string } | undefined;
+  db.close();
+  return row;
+}
+
+const buyer = resolveGrant('buyer_inbox');
+const manager = resolveGrant('manager_inbox');
 
 if (!buyer) {
   console.error('No buyer_inbox configured. Set one via http://localhost:3000');
   process.exit(1);
 }
+
+const managerEmail = manager?.email ?? buyer.email;
+const managerGrantId = manager?.grant_id ?? buyer.grant_id; // fallback: send to self
 
 const agent = createAgent({
   nylasClient: nylas,
@@ -33,8 +44,12 @@ const agent = createAgent({
 const POLL_SECONDS = parseInt(process.env.AGENT_POLL_SECONDS || '5', 10);
 const processedIds = new Set<string>();
 let autoCount = 0, ignoreCount = 0, draftCount = 0;
+let lastDigestSent: number | null = null;
+
+const digestFrequency: DigestFrequency = (process.env.MANAGER_DIGEST_FREQUENCY as DigestFrequency) || 'on_sensitive';
 
 console.log(`🤖 Agent daemon started — watching ${buyer.email} every ${POLL_SECONDS}s`);
+console.log(`   Manager digest: ${managerEmail} (${digestFrequency})`);
 console.log(`   Model: ${model} @ ${baseUrl}\n`);
 
 async function tick() {
@@ -56,6 +71,24 @@ async function tick() {
 
       const icon = t === 'auto_replied' ? '✅' : t === 'ignored' ? '🗑️' : '📝';
       console.log(`${icon} [${t}] ${email.subject.slice(0, 70)}`);
+
+      // Send manager digest if a draft was queued and frequency says now
+      if (t === 'drafted' && shouldSendDigest(digestFrequency, lastDigestSent, true)) {
+        const drafts = draftStore.list();
+        const html = buildDigestHtml(drafts, autoCount, ignoreCount);
+        try {
+          await nylas.sendMessage(
+            managerGrantId!,
+            managerEmail,
+            `📋 Agent Digest — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+            html,
+          );
+          lastDigestSent = Date.now();
+          console.log(`  📬 Digest sent to ${managerEmail} (${drafts.length} draft(s))`);
+        } catch (e) {
+          console.error('  ⚠ Failed to send digest:', (e as Error).message);
+        }
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
