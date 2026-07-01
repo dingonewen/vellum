@@ -22,7 +22,9 @@ export function createGrantStore(db: Db): GrantStore {
       db.prepare(
         `INSERT INTO grants (user_id, grant_id, email, created_at)
          VALUES (?, ?, ?, ?)
-         ON CONFLICT (grant_id) DO UPDATE SET email = excluded.email`
+         ON CONFLICT (grant_id) DO UPDATE SET
+           user_id = excluded.user_id,
+           email = excluded.email`
       ).run(userId, grantId, email, Date.now());
     },
 
