@@ -2,66 +2,43 @@ import BetterSqlite3 from 'better-sqlite3';
 import * as path from 'path';
 import type { Persona } from './types';
 
-function requireEnv(key: string): string {
-  const value = process.env[key];
-  if (!value) {
+/** Open the Vellum DB (read-only) and resolve a persona by mailbox_type. */
+function resolvePersona(
+  id: string,
+  name: string,
+  mailboxType: string,
+  envEmailKey: string,
+): Persona {
+  const dbPath = path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/vellum.db');
+  const db = new BetterSqlite3(dbPath, { readonly: true });
+
+  const row = db.prepare(
+    'SELECT email, grant_id FROM grants WHERE mailbox_type = ? ORDER BY created_at ASC LIMIT 1'
+  ).get(mailboxType) as { email: string; grant_id: string } | undefined;
+  db.close();
+
+  if (row) {
+    return { id, name, email: row.email, grantId: row.grant_id };
+  }
+
+  // Fallback: try env var
+  const email = process.env[envEmailKey];
+  if (!email) {
     throw new Error(
-      `Missing environment variable: ${key}. Add it to your .env file.`
+      `No mailbox configured as "${mailboxType}". Either:\n` +
+      `  1. Visit http://localhost:3000, connect a mailbox, and set its type to "${mailboxType}", or\n` +
+      `  2. Set ${envEmailKey} in .env`
     );
   }
-  return value;
-}
-
-/**
- * Try to find a Nylas grant ID for the given email in vellum.db.
- * Returns the grant ID if found, or null.
- */
-function lookupGrantId(email: string): string | null {
-  try {
-    const dbPath = path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/vellum.db');
-    const db = new BetterSqlite3(dbPath, { readonly: true });
-    const row = db.prepare('SELECT grant_id FROM grants WHERE email = ? ORDER BY created_at DESC LIMIT 1').get(email) as { grant_id: string } | undefined;
-    db.close();
-    return row?.grant_id ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveGrantId(envKey: string, email: string): string {
-  // Env var takes priority (backward compatible)
-  const fromEnv = process.env[envKey];
-  if (fromEnv) return fromEnv;
-
-  // Auto-lookup from vellum.db (OAuth flow)
-  const fromDb = lookupGrantId(email);
-  if (fromDb) return fromDb;
 
   throw new Error(
-    `Grant ID not found for ${email}. Either:\n` +
-    `  1. Set ${envKey} in .env, or\n` +
-    `  2. Connect the mailbox via http://localhost:3000/auth/connect first`
+    `Mailbox ${email} not found in DB. Run OAuth first: http://localhost:3000/auth/connect`
   );
 }
 
-const primaryEmail = requireEnv('SANDBOX_PRIMARY_EMAIL');
-const cloudEmail = requireEnv('SANDBOX_CLOUD_EMAIL');
-const primaryGrantId = resolveGrantId('SANDBOX_PRIMARY_GRANT_ID', primaryEmail);
-const cloudGrantId = resolveGrantId('SANDBOX_CLOUD_GRANT_ID', cloudEmail);
+export const PRIMARY: Persona = resolvePersona('primary', 'Tifa Lockhart', 'buyer_inbox', 'SANDBOX_PRIMARY_EMAIL');
 
-export const PRIMARY: Persona = {
-  id: 'primary',
-  name: 'Tifa Lockhart',
-  email: primaryEmail,
-  grantId: primaryGrantId,
-};
-
-export const CLOUD: Persona = {
-  id: 'cloud',
-  name: 'Cloud Strife',
-  email: cloudEmail,
-  grantId: cloudGrantId,
-};
+export const CLOUD: Persona = resolvePersona('cloud', 'Cloud Strife', 'other', 'SANDBOX_CLOUD_EMAIL');
 
 export const PERSONAS: Record<string, Persona> = {
   primary: PRIMARY,
