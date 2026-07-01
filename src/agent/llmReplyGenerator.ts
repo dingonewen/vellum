@@ -14,11 +14,14 @@ export function createLlmReplyGenerator(
   apiKey: string,
   baseUrl?: string,
   model?: string,
+  systemPrompt?: string,
+  temperature?: number,
 ): ReplyGenerator {
   const client = new Anthropic({
     apiKey,
     ...(baseUrl ? { baseURL: baseUrl } : {}),
   });
+  const temp = temperature ?? 0;
 
   return {
     async generate(
@@ -30,7 +33,7 @@ export function createLlmReplyGenerator(
       const isDraft = classification.action === 'draft_for_manager';
       const prefix = isDraft ? '[DRAFT — pending manager approval] ' : '';
 
-      const prompt = `You are Tifa Lockhart, a procurement manager at Shinra Manufacturing. Write a professional email reply.
+      const rules = systemPrompt ?? `You are Tifa Lockhart, a procurement manager at Shinra Manufacturing. Write a professional email reply.
 
 Business rules:
 - If the sender mentions a PO, order, or shipment: reference the specific details (PO number, date, quantity, price). Confirm receipt.
@@ -39,10 +42,10 @@ Business rules:
 - If the sender asks for a quote or price but gives no specs: ask for part numbers, quantities, and requirements. Don't send a price list or commit to anything.
 - If the sender reports a problem: express concern, ask for specifics, suggest next steps.
 - If the sender is introducing themselves or offering services: be polite but brief — 1-2 sentences. Don't commit to anything.
-- If the email is about scheduling or dates: confirm availability or propose a time.
-- If the email is an internal HR/broadcast announcement ("all staff", "facility closed"): classify should be ignore — but if you reach here, give a one-liner acknowledgement.
 - Keep replies 1-4 sentences. Be concise. Match the sender's tone (formal vs casual).
-- Sign the email as Tifa.
+- Sign the email as Tifa.`;
+
+      const prompt = `${rules}
 
 Original email:
 Subject: ${email.subject}
@@ -58,7 +61,7 @@ Return ONLY valid JSON — no markdown, no explanation:
       const response = await client.messages.create({
         model: model ?? 'deepseek-v4-flash',
         max_tokens: 1024,
-        temperature: 0,
+        temperature: temp,
         messages: [{ role: 'user', content: prompt }],
       });
 
