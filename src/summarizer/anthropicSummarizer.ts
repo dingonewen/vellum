@@ -20,12 +20,12 @@ export function createAnthropicSummarizer(apiKey: string, baseUrl?: string): Sum
         messages: [{ role: "user", content: prompt }],
       });
 
-      const block = response.content[0];
-      if (block.type !== "text") {
-        throw new Error(`Unexpected response block type: ${block.type}`);
+      const textBlock = response.content.find(b => b.type === 'text');
+      if (!textBlock) {
+        throw new Error('No text block in response');
       }
 
-      return parseResponse(block.text, messages.length);
+      return parseResponse(textBlock.text, messages.length);
     },
   };
 }

@@ -50,12 +50,13 @@ Return ONLY a JSON object — no other text:
         messages: [{ role: 'user', content: prompt }],
       });
 
-      const block = response.content[0];
-      if (block.type !== 'text') {
-        throw new Error(`Unexpected response block type: ${block.type}`);
+      // DeepSeek may return a "thinking" block before the text block
+      const textBlock = response.content.find(b => b.type === 'text');
+      if (!textBlock) {
+        throw new Error('No text block in response');
       }
 
-      const text = block.text.trim();
+      const text = textBlock.text.trim();
       const json = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
 
       try {
