@@ -12,6 +12,8 @@ import {
   CREATE_PENDING_MESSAGES_TABLE,
   CREATE_SCHEDULES_IDX,
   CREATE_SCHEDULES_TABLE,
+  MIGRATE_GRANTS_MAILBOX_TYPE,
+  CREATE_MANAGER_SETTINGS_TABLE,
 } from "./schema";
 
 export type Db = BetterSQLite3Database;
@@ -35,6 +37,10 @@ export function initDb(dbPath: string): Db {
   db.exec(CREATE_PENDING_IDX);
   db.exec(CREATE_SCHEDULES_TABLE);
   db.exec(CREATE_SCHEDULES_IDX);
+
+  // Migrations (safe to re-run — errors are caught for idempotent columns)
+  try { db.exec(MIGRATE_GRANTS_MAILBOX_TYPE); } catch { /* column already exists */ }
+  db.exec(CREATE_MANAGER_SETTINGS_TABLE);
 
   return db;
 }
