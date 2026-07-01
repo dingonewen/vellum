@@ -7,6 +7,7 @@ import type { JobRunner } from "../scheduler/scheduler";
 import { createAnthropicSummarizer } from "../summarizer/anthropicSummarizer";
 import { createGeminiSummarizer } from "../summarizer/geminiSummarizer";
 import { createOpenAISummarizer } from "../summarizer/openaiSummarizer";
+import { config } from "../config";
 
 const DEFAULT_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
@@ -15,7 +16,7 @@ function resolveSummarizer(provider: string | null, apiKey: string | null): Summ
     throw new Error("No LLM provider configured. Please save your settings first.");
   }
   switch (provider) {
-    case "anthropic": return createAnthropicSummarizer(apiKey);
+    case "anthropic": return createAnthropicSummarizer(apiKey, config.ANTHROPIC_BASE_URL);
     case "gemini":    return createGeminiSummarizer(apiKey);
     case "openai":    return createOpenAISummarizer(apiKey);
     default:          throw new Error(`Unknown LLM provider: ${provider}`);

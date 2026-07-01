@@ -4,8 +4,11 @@ import type { Summarizer } from "./summarizer";
 import { assemblePrompt, parseResponse } from "./prompt";
 import { LLM_MODELS } from "./models";
 
-export function createAnthropicSummarizer(apiKey: string): Summarizer {
-  const client = new Anthropic({ apiKey });
+export function createAnthropicSummarizer(apiKey: string, baseUrl?: string): Summarizer {
+  const client = new Anthropic({
+    apiKey,
+    ...(baseUrl ? { baseURL: baseUrl } : {}),
+  });
 
   return {
     async summarize(messages: EmailMessage[]) {

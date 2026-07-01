@@ -16,5 +16,8 @@ export { createRuleReplyGenerator } from './replyGenerator';
 export type { ReplyGenerator, GeneratedReply } from './replyGenerator';
 
 export { generateManagerDigest, buildDigestHtml } from './managerDigest';
+export { createLlmClassifier } from './llmClassifier';
+export { createLlmReplyGenerator } from './llmReplyGenerator';
+
 export { checkSensitivity } from './sensitivity';
 export type { SensitivityResult } from './sensitivity';
