@@ -45,18 +45,16 @@ Return ONLY a JSON object — no other text:
 
       const response = await client.messages.create({
         model: model ?? 'claude-haiku-4-5-20251001',
-        max_tokens: 512,
+        max_tokens: 1024,
         temperature: 0.3,
         messages: [{ role: 'user', content: prompt }],
       });
 
-      // DeepSeek may return a "thinking" block before the text block
-      const textBlock = response.content.find(b => b.type === 'text');
-      if (!textBlock) {
-        throw new Error('No text block in response');
-      }
-
-      const text = textBlock.text.trim();
+      // DeepSeek may return a "thinking" block — look for text, fall back to any block
+      const textBlock = response.content.find(b => b.type === 'text')
+        ?? response.content.find(b => b.type === 'thinking')
+        ?? response.content[0];
+      const text = (textBlock as { text: string }).text?.trim() ?? '';
       const json = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
 
       try {
