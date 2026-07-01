@@ -61,10 +61,11 @@ async function findRecipientMessageId(
   recipientGrantId: string,
   subject: string,
   sentAt: number,
+  fast = false,
 ): Promise<string | null> {
   const since = Math.floor(sentAt / 1000) - 30; // look back 30s before send
-  const maxTries = 12;
-  const pollMs = 5000;
+  const maxTries = fast ? 3 : 12;
+  const pollMs = fast ? 1500 : 5000;
 
   for (let attempt = 0; attempt < maxTries; attempt++) {
     if (attempt > 0) {
@@ -77,7 +78,7 @@ async function findRecipientMessageId(
       });
       const match = page.messages.find(m => m.subject === subject);
       if (match) {
-        console.log(`     ✓ Found recipient message after ${attempt * 5}s`);
+        console.log(`     ✓ Found recipient message after ${attempt * (fast ? 1.5 : 5)}s`);
         return match.id;
       }
     } catch {
@@ -99,6 +100,7 @@ async function executeStep(
   context: ScenarioContext,
   previousMessageId: string | null,
   dryRun: boolean,
+  fast = false,
 ): Promise<{ messageId: string; context: ScenarioContext }> {
   const step = scenario.steps[stepIndex];
   const persona = step.senderId === 'primary' ? PRIMARY : CLOUD;
@@ -148,7 +150,7 @@ async function executeStep(
   // This ID is needed for proper In-Reply-To threading when they reply.
   let recipientMessageId: string | null = null;
   if (!dryRun) {
-    recipientMessageId = await findRecipientMessageId(recipient.grantId, subject, sentAt);
+    recipientMessageId = await findRecipientMessageId(recipient.grantId, subject, sentAt, fast);
   }
 
   // Persist state immediately after successful send
@@ -253,7 +255,7 @@ async function runSteps(
     }
 
     try {
-      const result = await executeStep(scenario, i, context, previousMessageId, isDryRun);
+      const result = await executeStep(scenario, i, context, previousMessageId, isDryRun, options.fast ?? false);
       context = result.context;
       previousMessageId = result.messageId;
       if (!isDryRun) {

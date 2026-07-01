@@ -77,9 +77,15 @@ export function startDaemon(options: DaemonOptions): DaemonHandle {
   console.log(`   Manager digest: ${sendDigest ? `${managerEmail} (${digestFrequency})` : 'DISABLED'}`);
   console.log(`   Model: ${model} @ ${baseUrl}\n`);
 
+  let isFirstTick = true;
+
   async function tick() {
     try {
-      const since = Math.floor(Date.now() / 1000) - pollSeconds * 2;
+      // First tick looks back 2 min to catch seed emails; subsequent ticks
+      // use a tight rolling window to avoid re-processing old mail.
+      const lookback = isFirstTick ? 120 : pollSeconds * 2;
+      const since = Math.floor(Date.now() / 1000) - lookback;
+      if (isFirstTick) isFirstTick = false;
       const page = await nylas.listMessages(agentGrant!.grant_id, {
         sinceTimestamp: since,
         limit: 5,
