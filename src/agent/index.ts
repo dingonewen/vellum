@@ -15,7 +15,8 @@ export type { Classifier, Classification, EmailAction } from './classifier';
 export { createRuleReplyGenerator } from './replyGenerator';
 export type { ReplyGenerator, GeneratedReply } from './replyGenerator';
 
-export { generateManagerDigest, buildDigestHtml } from './managerDigest';
+export { generateManagerDigest, buildDigestHtml, shouldSendDigest } from './managerDigest';
+export type { DigestFrequency } from './managerDigest';
 export { createLlmClassifier } from './llmClassifier';
 export { createLlmReplyGenerator } from './llmReplyGenerator';
 

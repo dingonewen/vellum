@@ -1,5 +1,44 @@
 import type { DraftStore } from './orchestrator';
 
+export type DigestFrequency = 'on_sensitive' | 'every_6h' | 'daily_4pm';
+
+/**
+ * Determine whether a manager digest should be sent now based on the
+ * configured frequency, last send time, and whether there are pending drafts.
+ */
+export function shouldSendDigest(
+  frequency: DigestFrequency,
+  lastSentAt: number | null,
+  hasPendingDrafts: boolean,
+): boolean {
+  if (!hasPendingDrafts) return false;
+
+  const now = Date.now();
+
+  switch (frequency) {
+    case 'on_sensitive':
+      return true;
+
+    case 'every_6h': {
+      if (lastSentAt === null) return true;
+      const elapsed = now - lastSentAt;
+      return elapsed >= 6 * 3600 * 1000;
+    }
+
+    case 'daily_4pm': {
+      const nowDate = new Date(now);
+      const today4pm = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), 16, 0, 0);
+      // Not yet 4 PM today
+      if (now < today4pm.getTime()) return false;
+      // Never sent, or last sent was before today's 4 PM
+      return lastSentAt === null || lastSentAt < today4pm.getTime();
+    }
+
+    default:
+      return false;
+  }
+}
+
 export interface DigestEntry {
   subject: string;
   from: string;
