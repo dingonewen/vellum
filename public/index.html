@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vellum — Mailbox Setup</title>
+  <title>Vellum — Setup</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet" />
@@ -26,7 +26,7 @@
       box-shadow: inset 0 1px 3px rgba(44,24,16,0.04), 0 4px 16px rgba(44,24,16,0.08);
       padding: 40px 44px;
       width: 100%;
-      max-width: 500px;
+      max-width: 520px;
     }
     .logo {
       font-family: 'Playfair Display', Georgia, serif;
@@ -46,8 +46,15 @@
       font-family: 'Playfair Display', Georgia, serif;
       font-size: 17px;
       font-weight: 600;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       color: #2C1810;
+    }
+    h3 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 18px 0 8px;
+      color: #5C3D1E;
     }
     .btn {
       display: inline-flex;
@@ -71,53 +78,157 @@
       color: #7C4F2A;
       border: 1px solid #E8DCC8;
     }
-    .mailbox-list { margin-bottom: 16px; }
+    .btn-save {
+      background: #7C4F2A;
+      color: #FDF8F0;
+      margin-top: 12px;
+    }
     .mailbox-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
+      gap: 10px;
+      padding: 10px 12px;
       background: #F5EFE4;
       border: 1px solid #E8DCC8;
       border-radius: 2px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .mailbox-email {
+      flex: 1;
+      min-width: 160px;
       font-size: 15px;
       color: #5C3D1E;
     }
+    .mailbox-type {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 13px;
+      padding: 4px 8px;
+      border: 1px solid #E8DCC8;
+      border-radius: 2px;
+      background: #FFFDF7;
+      color: #2C1810;
+      cursor: pointer;
+    }
     .grant-id {
+      width: 100%;
       font-size: 11px;
       color: #B8A08A;
+      margin-top: 4px;
       word-break: break-all;
-      margin-top: 2px;
     }
+    select {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 14px;
+      padding: 6px 10px;
+      border: 1px solid #E8DCC8;
+      border-radius: 2px;
+      background: #FFFDF7;
+      color: #2C1810;
+      width: 100%;
+      margin: 8px 0 14px;
+      cursor: pointer;
+      outline: none;
+    }
+    select:focus { border-color: #C4A35A; }
+    .divider {
+      text-align: center;
+      color: #C4A35A;
+      font-size: 22px;
+      margin: 28px 0 20px;
+    }
+    .saved { color: #6B8E4A; font-size: 13px; font-style: italic; display: none; margin-left: 8px; }
+    .empty { color: #B8A08A; font-size: 14px; font-style: italic; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="logo">Vellum</div>
-    <div class="tagline">Connect mailboxes for the Sandbox &amp; Agent</div>
+    <div class="tagline">Configure mailboxes for the autonomous email agent</div>
 
     <h2>Connected Mailboxes</h2>
-    <div id="mailbox-list" class="mailbox-list" style="display:none;"></div>
-    <p style="color:#8B7355;font-size:14px;margin-bottom:8px;">Grant IDs are needed for <code>.env</code> sandbox configuration.</p>
-    <a href="/auth/connect" class="btn btn-primary" id="connect-btn">
-      ✉ Connect a mailbox
-    </a>
+    <div id="mailbox-list"><p class="empty">No mailboxes connected yet.</p></div>
+    <a href="/auth/connect" class="btn btn-primary" id="connect-btn">✉ Connect a mailbox</a>
+
+    <div class="divider">&#10086;</div>
+
+    <h2>Manager Digest</h2>
+    <p style="color:#8B7355;font-size:14px;margin-bottom:10px;">
+      How often should the manager receive a summary of pending approvals?
+    </p>
+    <select id="digest-frequency">
+      <option value="on_sensitive">Immediately — whenever a sensitive draft is queued</option>
+      <option value="every_6h">Every 6 hours</option>
+      <option value="daily_4pm">Daily at 4:00 PM</option>
+    </select>
+    <button class="btn btn-save" onclick="saveManager()">Save Digest Settings</button>
+    <span class="saved" id="manager-saved">✓ Saved</span>
   </div>
 
   <script>
-    async function loadGrants() {
+    const TYPE_LABELS = {
+      buyer_inbox: 'Buyer Inbox (agent watches)',
+      manager_inbox: 'Manager Inbox (receives digest)',
+      other: 'Other (sandbox / supplier)',
+    };
+
+    async function loadSettings() {
       try {
-        const res = await fetch('/auth/grants');
+        const res = await fetch('/settings');
         const data = await res.json();
-        const list = document.getElementById('mailbox-list');
-        if (data.grants && data.grants.length > 0) {
-          list.style.display = 'block';
-          list.innerHTML = data.grants
-            .map(g => `<div class="mailbox-item">✓ ${g.email}<div class="grant-id">Grant: ${g.grantId}</div></div>`)
-            .join('');
-          document.getElementById('connect-btn').textContent = '✉ Connect another mailbox';
+        renderGrants(data.grants || []);
+        if (data.manager) {
+          document.getElementById('digest-frequency').value = data.manager.digestFrequency;
         }
+      } catch {}
+    }
+
+    function renderGrants(grants) {
+      const list = document.getElementById('mailbox-list');
+      if (grants.length === 0) {
+        list.innerHTML = '<p class="empty">No mailboxes connected yet.</p>';
+        return;
+      }
+      list.innerHTML = grants.map(g => `
+        <div class="mailbox-item">
+          <span class="mailbox-email">${g.email}</span>
+          <select class="mailbox-type" data-grant="${g.grantId}" onchange="saveMailboxType(this)">
+            ${Object.entries(TYPE_LABELS).map(([val, label]) =>
+              `<option value="${val}" ${g.mailboxType === val ? 'selected' : ''}>${label}</option>`
+            ).join('')}
+          </select>
+          <span class="saved" id="saved-${g.grantId}">✓ Saved</span>
+          <div class="grant-id">Grant: ${g.grantId}</div>
+        </div>
+      `).join('');
+      document.getElementById('connect-btn').textContent = '✉ Connect another mailbox';
+    }
+
+    async function saveMailboxType(select) {
+      const grantId = select.dataset.grant;
+      const mailboxType = select.value;
+      try {
+        await fetch('/settings/mailbox', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grantId, mailboxType }),
+        });
+        const el = document.getElementById('saved-' + grantId);
+        if (el) { el.style.display = 'inline'; setTimeout(() => el.style.display = 'none', 2000); }
+      } catch {}
+    }
+
+    async function saveManager() {
+      const digestFrequency = document.getElementById('digest-frequency').value;
+      try {
+        await fetch('/settings/manager', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ digestFrequency }),
+        });
+        const el = document.getElementById('manager-saved');
+        el.style.display = 'inline';
+        setTimeout(() => el.style.display = 'none', 2000);
       } catch {}
     }
 
@@ -126,7 +237,7 @@
       window.history.replaceState({}, '', '/');
     }
 
-    loadGrants();
+    loadSettings();
   </script>
 </body>
 </html>
