@@ -22,3 +22,7 @@ export { createLlmReplyGenerator } from './llmReplyGenerator';
 
 export { checkSensitivity } from './sensitivity';
 export type { SensitivityResult } from './sensitivity';
+
+export { resolveGrant, resolveDbPath } from './db';
+export { PERSONAS, type PersonaConfig } from './personas';
+export { startDaemon, type DaemonOptions, type DaemonHandle } from './daemon-runner';
