@@ -13,6 +13,7 @@ export interface GrantStore {
   findByUserId(userId: string): Grant[];
   findByEmail(email: string): Grant | null;
   setMailboxType(grantId: string, mailboxType: string): void;
+  deleteByGrantId(grantId: string): void;
 }
 
 export function createGrantStore(db: Db): GrantStore {
@@ -51,6 +52,10 @@ export function createGrantStore(db: Db): GrantStore {
       db.prepare(
         `UPDATE grants SET mailbox_type = ? WHERE grant_id = ?`
       ).run(mailboxType, grantId);
+    },
+
+    deleteByGrantId(grantId: string): void {
+      db.prepare(`DELETE FROM grants WHERE grant_id = ?`).run(grantId);
     },
   };
 }

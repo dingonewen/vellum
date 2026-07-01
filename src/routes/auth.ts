@@ -75,9 +75,10 @@ authRouter.get("/callback", async (req, res) => {
     // Issue a fresh session cookie
     const newSessionId = randomUUID();
     sessionStore.create(newSessionId, userId);
+    const isProduction = config.APP_BASE_URL.startsWith("https");
     res.cookie("session_id", newSessionId, {
       httpOnly: true,
-      secure: true,
+      secure: isProduction,
       sameSite: "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
@@ -103,4 +104,15 @@ authRouter.get("/grants", (req, res) => {
   }
   const grants = grantStore.findByUserId(session.userId);
   res.json({ grants: grants.map((g) => ({ email: g.email, grantId: g.grantId })) });
+});
+
+// Delete a connected mailbox
+authRouter.delete("/grants/:grantId", (req, res) => {
+  const sessionId = req.cookies?.session_id as string | undefined;
+  if (!sessionId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  const session = sessionStore.find(sessionId);
+  if (!session) { res.status(401).json({ error: "Session expired" }); return; }
+
+  grantStore.deleteByGrantId(req.params.grantId);
+  res.json({ ok: true });
 });

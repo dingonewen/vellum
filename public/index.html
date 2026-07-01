@@ -93,6 +93,7 @@
       border-radius: 2px;
       margin-bottom: 10px;
       flex-wrap: wrap;
+      position: relative;
     }
     .mailbox-email {
       flex: 1;
@@ -138,6 +139,18 @@
       margin: 28px 0 20px;
     }
     .saved { color: #6B8E4A; font-size: 13px; font-style: italic; display: none; margin-left: 8px; }
+    .btn-del {
+      position: absolute;
+      top: 4px; right: 6px;
+      background: none;
+      border: none;
+      color: #C0B0A0;
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      padding: 2px 6px;
+    }
+    .btn-del:hover { color: #8B3A30; }
     .empty { color: #B8A08A; font-size: 14px; font-style: italic; }
   </style>
 </head>
@@ -198,6 +211,7 @@
             ).join('')}
           </select>
           <span class="saved" id="saved-${g.grantId}">✓ Saved</span>
+          <button class="btn-del" onclick="deleteMailbox('${g.grantId}')" title="Remove">×</button>
           <div class="grant-id">Grant: ${g.grantId}</div>
         </div>
       `).join('');
@@ -215,6 +229,14 @@
         });
         const el = document.getElementById('saved-' + grantId);
         if (el) { el.style.display = 'inline'; setTimeout(() => el.style.display = 'none', 2000); }
+      } catch {}
+    }
+
+    async function deleteMailbox(grantId) {
+      if (!confirm('Remove this mailbox?')) return;
+      try {
+        await fetch('/auth/grants/' + grantId, { method: 'DELETE' });
+        loadSettings();
       } catch {}
     }
 
