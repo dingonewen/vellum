@@ -61,8 +61,8 @@ export function startDaemon(options: DaemonOptions): DaemonHandle {
   const agent = createAgent({
     nylasClient: nylas,
     grantId: agentGrant.grant_id,
-    classifier: createLlmClassifier(apiKey, baseUrl, model),
-    replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model, persona.name, persona.role),
+    classifier: createLlmClassifier(apiKey, baseUrl, model, persona.classifierContext),
+    replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model, persona.name, persona.role, persona.archetype),
     draftStore,
   });
 

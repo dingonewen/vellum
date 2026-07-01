@@ -19,6 +19,19 @@ export interface PersonaConfig {
    * If omitted, digests go to the persona's own email.
    */
   managerGrantType?: string;
+  /**
+   * Context description injected into the classifier prompt so it understands
+   * what kind of inbox this persona monitors (e.g. "supplier sales rep inbox"
+   * vs "procurement buyer inbox").
+   */
+  classifierContext?: string;
+  /**
+   * Persona archetype — tunes the reply generator's business rules.
+   * - "buyer": procurement manager receiving supplier emails
+   * - "supplier": sales rep receiving buyer inquiries / POs
+   * - "multi": multi-role — adapt rules based on email context
+   */
+  archetype?: 'buyer' | 'supplier' | 'multi';
 }
 
 export const PERSONAS: Record<string, PersonaConfig> = {
@@ -29,6 +42,8 @@ export const PERSONAS: Record<string, PersonaConfig> = {
     emoji: '🤖',
     label: 'Agent',
     managerGrantType: 'manager_inbox',
+    classifierContext: 'a procurement buyer at a manufacturing company monitoring her work inbox',
+    archetype: 'buyer',
   },
   cloud: {
     name: 'Cloud Strife',
@@ -37,5 +52,7 @@ export const PERSONAS: Record<string, PersonaConfig> = {
     emoji: '☁️',
     label: 'Cloud Agent',
     managerGrantType: 'buyer_inbox',
+    classifierContext: 'a multi-role contact. Your inbox receives a mix: replies to supplier emails (PO confirmations, order updates from buyers), random spam, HR broadcasts, misdirected emails, and occasional business inquiries. Only supplier-related business emails should be auto_replied — everything else should be ignored or drafted',
+    archetype: 'multi',
   },
 };

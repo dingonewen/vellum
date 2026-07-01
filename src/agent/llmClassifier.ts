@@ -14,11 +14,14 @@ export function createLlmClassifier(
   apiKey: string,
   baseUrl?: string,
   model?: string,
+  personaContext?: string,
 ): Classifier {
   const client = new Anthropic({
     apiKey,
     ...(baseUrl ? { baseURL: baseUrl } : {}),
   });
+
+  const inboxContext = personaContext || 'a procurement buyer at a manufacturing company monitoring her work inbox';
 
   return {
     async classify(email: EmailMessage): Promise<Classification> {
@@ -35,12 +38,12 @@ export function createLlmClassifier(
         };
       }
 
-      const prompt = `You are an email classifier for an autonomous agent monitoring a procurement buyer's inbox at a manufacturing company.
+      const prompt = `You are an email classifier for an autonomous agent. The agent is ${inboxContext}.
 
 Classify the email into EXACTLY ONE action:
-- "auto_reply" — routine business that the agent can handle alone: PO updates, shipping notifications, status checks, scheduling, urgent production issues. Also: vague inquiries where the agent should ask for specifics (e.g. "need a quote" with no details — auto-reply to ask what they need).
-- "ignore" — no response needed: spam, newsletters, marketing, promotions, emails sent to the wrong person, internal company announcements, HR broadcasts, "all staff" messages, facility notices, or FYI-only emails.
-- "draft" — requires human: payments, invoices, contracts, legal issues, pricing commitments, refunds, negotiating terms, or anything you are unsure about.
+- "auto_reply" — routine business that the agent can handle alone: PO updates, order confirmations, shipping notifications, status checks, production issues, scheduling, or business inquiries from known contacts. Also: vague inquiries where the agent should ask for specifics — auto-reply to ask what they need.
+- "ignore" — no response needed: spam, newsletters, marketing, promotions, emails sent to the wrong person, internal company announcements, HR broadcasts, "all staff" messages, facility notices, FYI-only emails, or automated notifications.
+- "draft" — requires human review: payments, invoices, contracts, legal issues, pricing commitments, refunds, negotiating terms, or anything you are genuinely unsure about.
 
 Return ONLY valid JSON — no markdown, no explanation:
 {"action":"<auto_reply|ignore|draft>","confidence":"<high|medium|low>","reason":"<one short sentence>"}
