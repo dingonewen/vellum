@@ -65,7 +65,7 @@ export function createRuleClassifier(): Classifier {
 
       // 3. Routine business signals → auto-reply
       const businessSignals = [
-        /\bPO[ #-]?\d{3,}\b/i,                // PO #1124
+        /\bPO[\s#-]*\d{3,}\b/i,              // PO #1124, PO 1124, PO#1124
         /\b(purchase order|order)\s*(update|confirmed|received|shipped)\b/i,
         /\bETA\b|\btracking\s*(number|#)\b/i,
         /\bon\s*(track|schedule)\b/i,
