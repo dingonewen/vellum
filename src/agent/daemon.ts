@@ -40,7 +40,7 @@ console.log(`   Model: ${model} @ ${baseUrl}\n`);
 async function tick() {
   try {
     const since = Math.floor(Date.now() / 1000) - POLL_SECONDS * 2;
-    const page = await nylas.listMessages(buyer!.grant_id, { sinceTimestamp: since, limit: 5 });
+    const page = await nylas.listMessages(buyer!.grant_id, { sinceTimestamp: since, limit: 5, unreadOnly: true });
 
     for (const email of page.messages) {
       if (processedIds.has(email.id)) continue;

@@ -27,6 +27,7 @@ export interface ListMessagesParams {
   sinceTimestamp: number;
   limit: number;
   pageToken?: string;
+  unreadOnly?: boolean;
 }
 
 export interface MessagePage {

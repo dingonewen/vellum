@@ -34,7 +34,7 @@ async function main() {
 
   // Fetch recent emails from Tifa's inbox (last 10)
   const since = Math.floor(Date.now() / 1000) - 3600; // last hour
-  const page = await nylas.listMessages(grantId, { sinceTimestamp: since, limit: 10 });
+  const page = await nylas.listMessages(grantId, { sinceTimestamp: since, limit: 10, unreadOnly: true });
 
   if (page.messages.length === 0) {
     console.log('No messages found in Tifa\'s inbox. Run sandbox first:');

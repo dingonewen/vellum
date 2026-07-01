@@ -37,7 +37,7 @@ export function createNylasClient(): NylasClient {
 
     async listMessages(
       grantId: string,
-      { sinceTimestamp, limit, pageToken }: ListMessagesParams
+      { sinceTimestamp, limit, pageToken, unreadOnly }: ListMessagesParams
     ): Promise<MessagePage> {
       const response = await nylas.messages.list({
         identifier: grantId,
@@ -45,6 +45,7 @@ export function createNylasClient(): NylasClient {
           receivedAfter: sinceTimestamp,
           limit,
           ...(pageToken !== undefined ? { pageToken } : {}),
+          ...(unreadOnly ? { unread: true } : {}),
         },
       });
 
