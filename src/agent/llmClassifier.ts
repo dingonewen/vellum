@@ -42,7 +42,7 @@ Given an email subject and snippet, classify it into EXACTLY ONE of:
 - "ignore" — spam, newsletters, marketing, promotions, or email sent to the wrong person. Do NOT reply.
 - "draft" — anything sensitive (payments, invoices, contracts, legal, pricing), or anything where you're unsure. A human manager will review.
 
-Return ONLY a JSON object with this exact format — no other text:
+Return ONLY valid parseable JSON — no markdown fences, no explanation, no thinking. Format:
 {"action":"<auto_reply|ignore|draft>","confidence":"<high|medium|low>","reason":"<one short sentence explaining why>"}
 
 EMAIL:
@@ -50,7 +50,7 @@ Subject: ${subject}
 Snippet: ${body}`;
 
       const response = await client.messages.create({
-        model: model ?? 'claude-haiku-4-5-20251001',
+        model: model ?? 'deepseek-v4-flash',
         max_tokens: 512,
         temperature: 0,
         messages: [{ role: 'user', content: prompt }],

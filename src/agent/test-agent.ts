@@ -4,7 +4,7 @@ import { createAgent, createMemoryDraftStore, createLlmClassifier, createLlmRepl
 
 const apiKey = process.env.AGENT_API_KEY || process.env.ANTHROPIC_API_KEY || '';
 const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
-const model = process.env.ANTHROPIC_MODEL || 'deepseek-v4-pro';
+const model = 'deepseek-v4-flash';
 const grantId = process.env.SANDBOX_PRIMARY_GRANT_ID!; // Tifa's Gmail
 
 const nylas = createNylasClient();

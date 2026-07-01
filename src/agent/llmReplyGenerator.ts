@@ -40,13 +40,13 @@ Original email snippet: ${email.snippet}
 Classification: ${classification.action} (confidence: ${classification.confidence})
 Reason: ${classification.reason}
 
-Return ONLY a JSON object — no other text:
+Return ONLY valid parseable JSON — no markdown, no explanation, no thinking:
 {"subject":"${subject}","body":"<p>HTML reply here</p>","confidence":"${classification.confidence}"}`;
 
       const response = await client.messages.create({
-        model: model ?? 'claude-haiku-4-5-20251001',
+        model: model ?? 'deepseek-v4-flash',
         max_tokens: 1024,
-        temperature: 0.3,
+        temperature: 0,
         messages: [{ role: 'user', content: prompt }],
       });
 
