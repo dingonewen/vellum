@@ -142,6 +142,25 @@ Create `sandbox/scenarios/<name>.ts` exporting a `Scenario` object. The engine d
 
 The Agent processes a real inbox: classify → decide → act. Rule-based by default (zero dependencies); swap to LLM-powered when a DeepSeek key is configured.
 
+### Mailbox Setup
+
+Start the server (`npm run dev`) and open `http://localhost:3000`. Connect mailboxes via OAuth, then assign each a role:
+
+| Type | Purpose |
+|------|---------|
+| **Buyer Inbox** | The inbox the agent watches. New mail → classify → reply/draft. |
+| **Manager Inbox** | Receives the daily digest with pending approvals. |
+| **Other** | Sandbox suppliers, test accounts, etc. |
+
+Each connected mailbox shows its Nylas grant ID for copy-paste into `.env`, and can be removed with the corner × button.
+
+Manager digest frequency is configured on the same page:
+- **Immediately** — send as soon as a sensitive draft is queued
+- **Every 6 hours**
+- **Daily at 4:00 PM**
+
+Settings persist in `manager_settings` table and survive restarts.
+
 ### Pipeline
 
 ```
@@ -216,8 +235,31 @@ src/agent/
   replyGenerator.ts     — RuleReplyGenerator: template-driven, conservative
   llmReplyGenerator.ts  — LLM reply generator (DeepSeek-compatible)
   orchestrator.ts       — Agent pipeline: classify → reply → dispatch
-  managerDigest.ts      — HTML digest builder for pending approvals
+  managerDigest.ts      — HTML digest + shouldSendDigest() frequency check
   index.ts              — unified exports
+
+src/routes/
+  auth.ts               — OAuth connect/callback, grant listing, grant deletion
+  settings.ts           — GET/POST mailbox types + manager digest frequency
+  webhooks.ts           — Nylas webhook endpoint (HMAC verified)
+
+src/stores/
+  grantStore.ts         — Grant CRUD + mailbox_type + delete
+  managerStore.ts       — Manager digest settings CRUD
+  userStore.ts          — User identity (session binding)
+```
+
+### Digest Frequency Logic
+
+`shouldSendDigest(frequency, lastSentAt, hasPendingDrafts)` determines whether to fire:
+
+```typescript
+import { shouldSendDigest } from './src/agent';
+
+// on_sensitive → trigger immediately when drafts exist
+// every_6h    → fire if 6+ hours since last send
+// daily_4pm   → fire if past 4 PM local time and not yet sent today
+shouldSendDigest('daily_4pm', lastSentAt, drafts.length > 0);
 ```
 
 ---
@@ -238,12 +280,13 @@ The Agent module reuses `NylasClient`, summarizer interfaces, and the DB layer f
 ## Development
 
 ```bash
-npm run dev       # Start Express server with hot reload
+npm run dev       # Start Express server with hot reload (tsx watch)
 npm run build     # Compile TypeScript
 npm run lint      # ESLint
 ```
 
-Connect mailboxes at `http://localhost:3000/auth/connect`. Grant IDs appear in the server log or can be queried from `SELECT * FROM grants`.
+Visit `http://localhost:3000` to set up mailboxes with type labels and digest frequency.
+Grant IDs are displayed in the UI and also logged to the server console on OAuth callback.
 
 ---
 
