@@ -37,7 +37,7 @@ const agent = createAgent({
   nylasClient: nylas,
   grantId: buyer.grant_id,
   classifier: createLlmClassifier(apiKey, baseUrl, model),
-  replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model),
+  replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model, 'Tifa Lockhart', 'a procurement manager at Shinra Manufacturing'),
   draftStore,
 });
 

@@ -36,7 +36,7 @@ const agent = createAgent({
   nylasClient: nylas,
   grantId: cloud.grant_id,
   classifier: createLlmClassifier(apiKey, baseUrl, model),
-  replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model),
+  replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model, 'Cloud Strife', 'a business contact. Adapt your role to the email: if discussing POs/shipments act as a supplier; if it is HR/facilities/spam do NOT reply; if the sender is clearly not your department, politely redirect or ignore'),
   draftStore,
 });
 

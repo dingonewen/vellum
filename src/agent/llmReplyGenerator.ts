@@ -14,7 +14,11 @@ export function createLlmReplyGenerator(
   apiKey: string,
   baseUrl?: string,
   model?: string,
+  personaName?: string,
+  personaRole?: string,
 ): ReplyGenerator {
+  const name = personaName || 'Tifa Lockhart';
+  const role = personaRole || 'a procurement manager at Shinra Manufacturing';
   const client = new Anthropic({
     apiKey,
     ...(baseUrl ? { baseURL: baseUrl } : {}),
@@ -30,7 +34,7 @@ export function createLlmReplyGenerator(
       const isDraft = classification.action === 'draft_for_manager';
       const prefix = isDraft ? '[DRAFT — pending manager approval] ' : '';
 
-      const prompt = `You are Tifa Lockhart, a procurement manager at Shinra Manufacturing. Write a professional email reply.
+      const prompt = `You are ${name}, ${role}. Write a professional email reply.
 
 Business rules:
 - If the sender mentions a PO, order, or shipment: reference the specific details (PO number, date, quantity, price). Confirm receipt.
@@ -42,7 +46,7 @@ Business rules:
 - If the email is about scheduling or dates: confirm availability or propose a time.
 - If the email is an internal HR/broadcast announcement ("all staff", "facility closed"): classify should be ignore — but if you reach here, give a one-liner acknowledgement.
 - Keep replies 1-4 sentences. Be concise. Match the sender's tone (formal vs casual).
-- Sign the email as Tifa.
+- Sign the email as ${name.split(' ')[0]}.
 
 Original email:
 Subject: ${email.subject}
