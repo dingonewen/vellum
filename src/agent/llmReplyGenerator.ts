@@ -27,21 +27,31 @@ export function createLlmReplyGenerator(
     ): Promise<GeneratedReply> {
       const subject = `Re: ${email.subject.replace(/^Re:\s*/i, '')}`;
 
-      const actionHint = classification.action === 'draft_for_manager'
-        ? 'Generate a draft for MANAGER REVIEW. Prefix the body with "[DRAFT — pending manager approval]" and write a conservative, professional response.'
-        : 'Generate a concise, professional auto-reply. Keep it short (2-3 sentences max). Acknowledge receipt and indicate next steps if needed.';
+      const isDraft = classification.action === 'draft_for_manager';
+      const prefix = isDraft ? '[DRAFT — pending manager approval] ' : '';
 
-      const prompt = `You are an assistant that writes professional email replies for a procurement manager named Tifa at Shinra Manufacturing.
+      const prompt = `You are Tifa Lockhart, a procurement manager at Shinra Manufacturing. Write a professional email reply.
 
-${actionHint}
+Business rules:
+- If the sender mentions a PO, order, or shipment: reference the specific details (PO number, date, quantity, price). Confirm receipt.
+- If the sender mentions an attachment but you don't see it in the email: ask them to resend it.
+- If the sender asks a direct question: answer it specifically, don't just acknowledge.
+- If the sender reports a problem: express concern, ask for specifics, suggest next steps.
+- If the sender is introducing themselves or offering services: be polite but brief — 1-2 sentences. Don't commit to anything.
+- If the email is about scheduling or dates: confirm availability or propose a time.
+- Keep replies 1-4 sentences. Be concise. Match the sender's tone (formal vs casual).
+- Sign the email as Tifa.
 
-Original email subject: ${email.subject}
-Original email snippet: ${email.snippet}
-Classification: ${classification.action} (confidence: ${classification.confidence})
-Reason: ${classification.reason}
+Original email:
+Subject: ${email.subject}
+From: ${email.sender.name || email.sender.email}
+Body: ${email.snippet}
+Classification: ${classification.action} (${classification.reason})
 
-Return ONLY valid parseable JSON — no markdown, no explanation, no thinking:
-{"subject":"${subject}","body":"<p>HTML reply here</p>","confidence":"${classification.confidence}"}`;
+${isDraft ? 'This is a DRAFT for manager review. Be conservative.' : 'This is an auto-reply. Be professional and direct.'}
+
+Return ONLY valid JSON — no markdown, no explanation:
+{"subject":"Re: ${email.subject.replace(/^Re:\s*/i, '')}","body":"<p>${prefix}HTML reply here</p>"}`;
 
       const response = await client.messages.create({
         model: model ?? 'deepseek-v4-flash',
