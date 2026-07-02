@@ -109,8 +109,11 @@ setInterval(tick, POLL_SECONDS * 1000);
 
 const PROACTIVE_INTERVAL = parseInt(process.env.PROACTIVE_INTERVAL || '0', 10); // seconds, 0=off
 
+const PROACTIVE_MAX = parseInt(process.env.PROACTIVE_MAX || '0', 10); // max threads, 0=unlimited
+
 if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
   const buyerInfo = grants.find(g => g.mailbox_type === 'buyer_inbox');
+  let proactiveSent = 0;
   if (!buyerInfo) {
     console.error('PROACTIVE mode requires a buyer_inbox grant. Skipping.');
   } else {
@@ -130,10 +133,23 @@ if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
       { name: 'Ray', company: 'Midgar Component Supply' },
     ];
 
+    let proactiveTimer: ReturnType<typeof setInterval>;
     function r(n: number) { return Math.floor(Math.random() * n); }
     function pick<T>(arr: T[]) { return arr[r(arr.length)]; }
 
     async function proactiveSend() {
+      if (PROACTIVE_MAX > 0 && proactiveSent >= PROACTIVE_MAX) {
+        clearInterval(proactiveTimer);
+        return;
+      }
+      // Check if Cloud has unread replies to handle first — reply priority > new thread
+      try {
+        const unread = await nylas.listMessages(persona!.grantId, { sinceTimestamp: Math.floor(Date.now()/1000)-PROACTIVE_INTERVAL, limit: 3, unreadOnly: true });
+        const fromTifa = unread.messages.filter(m =>
+          m.sender.email === buyerInfo?.email || m.subject.toLowerCase().includes('re:'));
+        if (fromTifa.length > 0) return; // skip — reply to Tifa first
+      } catch {}
+      proactiveSent++;
       const s = pick(scenarios);
       const sup = pick(suppliers);
       const po = `PO-2026-${String(r(9000) + 1000)}`;
@@ -157,8 +173,9 @@ if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
       } catch (e: any) { if (!e.message?.includes('429')) console.error('  ⚠ proactive:', e.message); }
     }
 
-    console.log(`📤 Proactive mode: Cloud → Tifa every ${PROACTIVE_INTERVAL}s\n`);
+    const maxLabel = PROACTIVE_MAX > 0 ? ` (max ${PROACTIVE_MAX} threads)` : '';
+    console.log(`📤 Proactive mode: Cloud → Tifa every ${PROACTIVE_INTERVAL}s${maxLabel}\n`);
     proactiveSend();
-    setInterval(proactiveSend, PROACTIVE_INTERVAL * 1000);
+    proactiveTimer = setInterval(proactiveSend, PROACTIVE_INTERVAL * 1000);
   }
 }
