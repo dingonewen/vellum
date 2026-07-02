@@ -70,16 +70,18 @@ const agent = createAgent({
   autoReplyAll: true,
 });
 
-const POLL_SECONDS = parseInt(process.env.AGENT_POLL_SECONDS || '5', 10);
+const BASE_POLL_SECONDS = parseInt(process.env.AGENT_POLL_SECONDS || '5', 10);
+let currentPollSeconds = BASE_POLL_SECONDS;
+const MAX_POLL_SECONDS = 60;
 const processedIds = new Set<string>();
 let autoCount = 0, ignoreCount = 0, draftCount = 0;
 
-console.log(`🤖 ${persona.name} daemon — ${persona.email} every ${POLL_SECONDS}s  temp=${persona.temp}\n`);
+console.log(`🤖 ${persona.name} daemon — ${persona.email} base=${BASE_POLL_SECONDS}s  temp=${persona.temp}\n`);
 
 async function tick() {
   try {
-    const since = Math.floor(Date.now() / 1000) - POLL_SECONDS * 2;
-    const page = await nylas.listMessages(persona!.grantId, { sinceTimestamp: since, limit: 5, unreadOnly: true });
+    const since = Math.floor(Date.now() / 1000) - currentPollSeconds * 3;
+    const page = await nylas.listMessages(persona!.grantId, { sinceTimestamp: since, limit: 3, unreadOnly: true });
 
     for (const email of page.messages) {
       if (processedIds.has(email.id)) continue;
@@ -97,18 +99,26 @@ async function tick() {
       const from = email.sender.name || email.sender.email;
       console.log(`${icon} [${t}] ${from.slice(0, 20)} → "${email.subject.slice(0, 60)}"`);
     }
+
+    // Success — gradually speed back up
+    if (currentPollSeconds > BASE_POLL_SECONDS) {
+      currentPollSeconds = Math.max(BASE_POLL_SECONDS, currentPollSeconds - 5);
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (/429|rate limit|activity limit|too many|throttl/i.test(msg)) {
-      console.warn('  ⏳ Rate limited — backing off...');
+      currentPollSeconds = Math.min(MAX_POLL_SECONDS, currentPollSeconds + 10);
+      console.warn(`  ⏳ Rate limited — slowing to ${currentPollSeconds}s`);
     } else if (!msg.includes('timeout')) {
       console.error('  ⚠', msg);
     }
   }
+  // Re-schedule with updated interval
+  clearTimeout(timer);
+  timer = setTimeout(tick, currentPollSeconds * 1000);
 }
 
-tick();
-setInterval(tick, POLL_SECONDS * 1000);
+let timer = setTimeout(tick, 1000); // start in 1s
 
 // ── Proactive mode (Cloud → Tifa random initiating emails) ──────────
 
