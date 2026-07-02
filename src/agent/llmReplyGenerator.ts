@@ -73,15 +73,24 @@ Return ONLY valid JSON — no markdown, no explanation:
         if (text.length > 0) break;
       }
 
-      const json = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+      // Extract JSON from possible markdown/code fences
+      let json = text
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```\s*$/i, '')
+        .trim();
+      // If the response starts with {, try to find the matching closing }
+      if (json.startsWith('{')) {
+        const lastBrace = json.lastIndexOf('}');
+        if (lastBrace > 0) json = json.slice(0, lastBrace + 1);
+      }
 
       try {
         return JSON.parse(json) as GeneratedReply;
       } catch {
-        console.warn('  ⚠ LLM reply unparseable. Using raw text.');
+        console.warn('  ⚠ LLM reply unparseable. Using safe fallback.');
         return {
           subject,
-          body: `<p>${text.replace(/\n/g, '<br/>')}</p>`,
+          body: '<p>Thank you for your message. I have received it and will follow up if needed.</p>',
           confidence: 'low',
         };
       }

@@ -67,7 +67,14 @@ Snippet: ${body}`;
         if (text.length > 0) break; // got a response, stop retrying
       }
 
-      const json = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+      let json = text
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```\s*$/i, '')
+        .trim();
+      if (json.startsWith('{')) {
+        const lastBrace = json.lastIndexOf('}');
+        if (lastBrace > 0) json = json.slice(0, lastBrace + 1);
+      }
 
       try {
         const parsed = JSON.parse(json) as {
