@@ -104,3 +104,61 @@ async function tick() {
 
 tick();
 setInterval(tick, POLL_SECONDS * 1000);
+
+// ── Proactive mode (Cloud → Tifa random initiating emails) ──────────
+
+const PROACTIVE_INTERVAL = parseInt(process.env.PROACTIVE_INTERVAL || '0', 10); // seconds, 0=off
+
+if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
+  const buyerInfo = grants.find(g => g.mailbox_type === 'buyer_inbox');
+  if (!buyerInfo) {
+    console.error('PROACTIVE mode requires a buyer_inbox grant. Skipping.');
+  } else {
+    const scenarios = [
+      { subject: 'PO #${po} — Confirmed, ETA ${eta}',        body: 'Hi Tifa, PO #${po} for ${qty} units of ${product} is confirmed. Delivery by ${eta}. — ${supplier} at ${company}' },
+      { subject: 'PO #${po} — Shipping Update',              body: 'Tifa, PO #${po} shipped this morning. Tracking: ${tracking}. ETA ${eta}. — ${supplier}, ${company}' },
+      { subject: 'URGENT: PO #${po} — Delay Notice',         body: 'Tifa, we hit a delay on PO #${po}. A QC check flagged ${issue}. Revised ETA: ${eta}. Apologies — ${supplier}' },
+      { subject: 'Invoice #${inv} for PO #${po}',            body: 'Dear Tifa, attached is invoice #${inv} for PO #${po} (${qty} × ${product}). Total: ${total}. Net 30. — ${supplier}' },
+      { subject: 'New pricing for ${product}',                body: 'Hi Tifa, just a heads-up — ${product} pricing will increase ~${pct} starting next month due to raw material costs. Lock in current pricing if you order by ${eta}. — ${supplier}' },
+      { subject: 'Quick question — PO #${po}',               body: 'Tifa, quick question about PO #${po} — do you want the standard packaging or export-grade crating? Please confirm by ${eta}. — ${supplier}' },
+    ];
+
+    const suppliers = [
+      { name: 'Sarah', company: 'Acme Industrial Supply' },
+      { name: 'Cloud Strife', company: 'Nibelheim Precision Parts' },
+      { name: 'Marco', company: 'Zenith Parts Co.' },
+      { name: 'Ray', company: 'Midgar Component Supply' },
+    ];
+
+    function r(n: number) { return Math.floor(Math.random() * n); }
+    function pick<T>(arr: T[]) { return arr[r(arr.length)]; }
+
+    async function proactiveSend() {
+      const s = pick(scenarios);
+      const sup = pick(suppliers);
+      const po = `PO-2026-${String(r(9000) + 1000)}`;
+      const inv = `INV-${String(r(9000) + 1000)}`;
+      const eta = new Date(Date.now() + (r(10)+3)*86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const qty = [100, 200, 300, 500, 750][r(5)];
+      const tracking = `1Z${Math.random().toString(36).slice(2, 18).toUpperCase()}`;
+
+      const subject = s.subject.replace(/\$\{(\w+)\}/g, (_, k) => {
+        const vars: Record<string,string> = { po, inv, eta, qty: String(qty), product: 'Precision Bearings ABEC-7', supplier: sup.name, company: sup.company, tracking, issue: pick(['raceway roundness','bearing noise','material hardness']), total: `$${(qty*18.5).toLocaleString()}`, pct: pick(['5%','8%','12%']) };
+        return vars[k] ?? '';
+      });
+      const body = `[${sup.name} @ ${sup.company}]\n\n${s.body.replace(/\$\{(\w+)\}/g, (_, k) => {
+        const vars: Record<string,string> = { po, inv, eta, qty: String(qty), product: 'Precision Bearings ABEC-7', supplier: sup.name, company: sup.company, tracking, issue: pick(['raceway roundness','bearing noise','material hardness']), total: `$${(qty*18.5).toLocaleString()}`, pct: pick(['5%','8%','12%']) };
+        return vars[k] ?? '';
+      })}`;
+
+      try {
+        const r = await nylas.sendMessage(persona.grantId, buyerInfo!.email, subject, body);
+        console.log(`📤 [proactive] ${sup.name} → ${subject.slice(0, 50)} (msgId: ${r.messageId.slice(0, 12)}...)`);
+      } catch (e: any) { if (!e.message?.includes('429')) console.error('  ⚠ proactive:', e.message); }
+    }
+
+    console.log(`📤 Proactive mode: Cloud → Tifa every ${PROACTIVE_INTERVAL}s\n`);
+    proactiveSend();
+    setInterval(proactiveSend, PROACTIVE_INTERVAL * 1000);
+  }
+}

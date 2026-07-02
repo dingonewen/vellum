@@ -149,8 +149,8 @@ async function executeStep(
   // Look up the message in the RECIPIENT's inbox to get their grant's messageId.
   // This ID is needed for proper In-Reply-To threading when they reply.
   let recipientMessageId: string | null = null;
-  if (!dryRun) {
-    recipientMessageId = await findRecipientMessageId(recipient.grantId, subject, sentAt, fast);
+  if (!dryRun && !fast) {
+    recipientMessageId = await findRecipientMessageId(recipient.grantId, subject, sentAt);
   }
 
   // Persist state immediately after successful send
