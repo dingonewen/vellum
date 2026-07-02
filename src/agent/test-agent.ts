@@ -44,8 +44,8 @@ async function main() {
   console.log(`🤖 Tifa reply — one-shot inbox scan\n`);
 
   // Scan unread from last 24 hours, batch process everything
-  const since = Math.floor(Date.now() / 1000) - 86400;
-  const page = await nylas.listMessages(grantId, { sinceTimestamp: since, limit: 50, unreadOnly: true });
+  const since = Math.floor(Date.now() / 1000) - 3600; // last hour
+  const page = await nylas.listMessages(grantId, { sinceTimestamp: since, limit: 50 });
 
   if (page.messages.length === 0) {
     console.log('No messages found in Tifa\'s inbox. Run sandbox first:');

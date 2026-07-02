@@ -83,7 +83,7 @@ const agent = createAgent({
 async function tick() {
   try {
     const since = Math.floor(Date.now() / 1000) - currentPollSeconds * 3;
-    const page = await nylas.listMessages(persona!.grantId, { sinceTimestamp: since, limit: 1, unreadOnly: true });
+    const page = await nylas.listMessages(persona!.grantId, { sinceTimestamp: since, limit: 1 });
 
     for (const email of page.messages) {
       if (processedIds.has(email.id)) continue;
