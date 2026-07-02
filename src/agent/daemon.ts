@@ -61,22 +61,24 @@ const model = 'deepseek-v4-flash';
 const nylas = createNylasClient();
 const draftStore = createMemoryDraftStore();
 
-const agent = createAgent({
-  nylasClient: nylas,
-  grantId: persona.grantId,
-  classifier: createLlmClassifier(apiKey, baseUrl, model),
-  replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model, persona.prompt, persona.temp),
-  draftStore,
-  autoReplyAll: true,
-});
-
+const DRY_RUN = process.env.DRY_RUN === '1';
 const BASE_POLL_SECONDS = parseInt(process.env.AGENT_POLL_SECONDS || '20', 10);
 let currentPollSeconds = BASE_POLL_SECONDS;
 const MAX_POLL_SECONDS = 60;
 const processedIds = new Set<string>();
 let autoCount = 0, ignoreCount = 0, draftCount = 0;
 
-console.log(`🤖 ${persona.name} daemon — ${persona.email} base=${BASE_POLL_SECONDS}s  temp=${persona.temp}\n`);
+console.log(`🤖 ${persona.name} daemon — ${persona.email} base=${BASE_POLL_SECONDS}s  temp=${persona.temp}  ${DRY_RUN ? 'DRY RUN' : 'LIVE'}\n`);
+
+// Dry-run: skip actual sending but still classify + generate
+const agent = createAgent({
+  nylasClient: DRY_RUN ? undefined : nylas,
+  grantId: DRY_RUN ? undefined : persona.grantId,
+  classifier: createLlmClassifier(apiKey, baseUrl, model),
+  replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model, persona.prompt, persona.temp),
+  draftStore,
+  autoReplyAll: true,
+});
 
 async function tick() {
   try {
@@ -132,29 +134,29 @@ if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
   if (!buyerInfo) {
     console.error('PROACTIVE mode requires a buyer_inbox grant. Skipping.');
   } else {
-    // Weighted topics — 1:2:7 clean:exception:irrelevant for realistic inbox
+    // Weighted topics — 2:3:5 clean:exception:irrelevant for realistic inbox
     const topics: Array<{ subject: string; weight: number }> = [
-      // Clean (10%) — PO accepted, no issues, smooth transaction
-      { subject: 'PO #${po} — Confirmed, ETA ${eta}', weight: 5 },
-      { subject: 'Re: PO #${po} — Shipment on Schedule', weight: 5 },
-      // Exception (20%) — supplier can't fulfill, delays, back-and-forth
-      { subject: 'URGENT: PO #${po} — Material Shortage, Revised ETA ${eta}', weight: 5 },
-      { subject: 'Re: PO #${po} — Unable to Fulfill at Quoted Price', weight: 5 },
-      { subject: 'PO #${po} — Partial Shipment Due to QC Hold', weight: 5 },
-      { subject: 'Re: PO #${po} — Delay Notice, Supplier Backlog', weight: 5 },
-      // Irrelevant (70%) — spam, wrong person, marketing, HR, garbage
-      { subject: '🔥 ONE-TIME OFFER — 50% Off Industrial Parts!!!', weight: 8 },
-      { subject: 'Reminder: Annual HR Compliance Training Due', weight: 7 },
-      { subject: 'Is this the Accounting Department?', weight: 7 },
-      { subject: 'New Product Line — Spring 2026 Catalog Now Available', weight: 7 },
-      { subject: 'Re: Your LinkedIn Profile Was Viewed 12 Times This Week', weight: 6 },
-      { subject: 'Fwd: Need Volunteers for the Company Picnic', weight: 5 },
-      { subject: 'Office Supplies Order — Please Approve Stationery Request', weight: 5 },
-      { subject: 'IMPORTANT: Building Fire Drill This Thursday', weight: 5 },
-      { subject: 'YOU WON! Claim Your Free Industrial Tools Bundle', weight: 5 },
-      { subject: 'Quick Question — Does Anyone Have Ray\'s New Email?', weight: 5 },
-      { subject: 'Newsletter: Q3 Manufacturing Trends & Insights', weight: 5 },
-      { subject: 'Invoice #${inv} — Payment Confirmation (Auto-Generated)', weight: 5 },
+      // Clean (20%) — PO accepted, no issues, smooth transaction
+      { subject: 'PO #${po} — Confirmed, ETA ${eta}', weight: 10 },
+      { subject: 'Re: PO #${po} — Shipment on Schedule', weight: 10 },
+      // Exception (30%) — supplier can't fulfill, delays, back-and-forth
+      { subject: 'URGENT: PO #${po} — Material Shortage, Revised ETA ${eta}', weight: 8 },
+      { subject: 'Re: PO #${po} — Unable to Fulfill at Quoted Price', weight: 8 },
+      { subject: 'PO #${po} — Partial Shipment Due to QC Hold', weight: 7 },
+      { subject: 'Re: PO #${po} — Delay Notice, Supplier Backlog', weight: 7 },
+      // Irrelevant (50%) — spam, wrong person, marketing, HR, garbage
+      { subject: '🔥 ONE-TIME OFFER — 50% Off Industrial Parts!!!', weight: 4 },
+      { subject: 'Reminder: Annual HR Compliance Training Due', weight: 4 },
+      { subject: 'Is this the Accounting Department?', weight: 4 },
+      { subject: 'New Product Line — Spring 2026 Catalog Now Available', weight: 4 },
+      { subject: 'Re: Your LinkedIn Profile Was Viewed 12 Times This Week', weight: 4 },
+      { subject: 'Fwd: Need Volunteers for the Company Picnic', weight: 4 },
+      { subject: 'Office Supplies Order — Please Approve Stationery Request', weight: 4 },
+      { subject: 'IMPORTANT: Building Fire Drill This Thursday', weight: 4 },
+      { subject: 'YOU WON! Claim Your Free Industrial Tools Bundle', weight: 4 },
+      { subject: 'Quick Question — Does Anyone Have Ray\'s New Email?', weight: 4 },
+      { subject: 'Newsletter: Q3 Manufacturing Trends & Insights', weight: 4 },
+      { subject: 'Invoice #${inv} — Payment Confirmation (Auto-Generated)', weight: 4 },
     ];
     const totalWeight = topics.reduce((s, t) => s + t.weight, 0);
 
@@ -226,15 +228,19 @@ Rules:
       } catch {
         body = `${sup.name} at ${sup.company} — ${topic.subject}`;
       }
-      try {
-        const r = await nylas.sendMessage(persona.grantId, buyerInfo!.email, subject, body);
-        console.log(`📤 [proactive] ${sup.name} → ${subject.slice(0, 50)} (msgId: ${r.messageId.slice(0, 12)}...)`);
-      } catch (e: any) {
-        const em = e?.message || String(e);
-        if (/429|rate limit|activity limit|too many|throttl/i.test(em)) {
-          console.warn('  ⏳ Proactive rate limited — backing off...');
-        } else {
-          console.error('  ⚠ proactive:', em);
+      if (DRY_RUN) {
+        console.log(`📤 [DRY RUN] ${sup.name} → "${subject.slice(0, 50)}"`);
+      } else {
+        try {
+          const r = await nylas.sendMessage(persona.grantId, buyerInfo!.email, subject, body);
+          console.log(`📤 [proactive] ${sup.name} → ${subject.slice(0, 50)} (msgId: ${r.messageId.slice(0, 12)}...)`);
+        } catch (e: any) {
+          const em = e?.message || String(e);
+          if (/429|rate limit|activity limit|too many|throttl/i.test(em)) {
+            console.warn('  ⏳ Proactive rate limited — backing off...');
+          } else {
+            console.error('  ⚠ proactive:', em);
+          }
         }
       }
     }
