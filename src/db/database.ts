@@ -6,12 +6,6 @@ import {
   CREATE_USERS_TABLE,
   CREATE_SESSIONS_TABLE,
   CREATE_GRANTS_TABLE,
-  CREATE_MESSAGES_IDX,
-  CREATE_MESSAGES_TABLE,
-  CREATE_PENDING_IDX,
-  CREATE_PENDING_MESSAGES_TABLE,
-  CREATE_SCHEDULES_IDX,
-  CREATE_SCHEDULES_TABLE,
   MIGRATE_GRANTS_MAILBOX_TYPE,
   CREATE_MANAGER_SETTINGS_TABLE,
 } from "./schema";
@@ -31,12 +25,6 @@ export function initDb(dbPath: string): Db {
   db.exec(CREATE_USERS_TABLE);
   db.exec(CREATE_SESSIONS_TABLE);
   db.exec(CREATE_GRANTS_TABLE);
-  db.exec(CREATE_MESSAGES_TABLE);
-  db.exec(CREATE_MESSAGES_IDX);
-  db.exec(CREATE_PENDING_MESSAGES_TABLE);
-  db.exec(CREATE_PENDING_IDX);
-  db.exec(CREATE_SCHEDULES_TABLE);
-  db.exec(CREATE_SCHEDULES_IDX);
 
   // Migrations (safe to re-run — errors are caught for idempotent columns)
   try { db.exec(MIGRATE_GRANTS_MAILBOX_TYPE); } catch { /* column already exists */ }
