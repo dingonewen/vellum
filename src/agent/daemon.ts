@@ -4,7 +4,7 @@ import * as path from 'path';
 import { createNylasClient } from '../nylas/nylasClient';
 import { createAgent, createMemoryDraftStore, createLlmClassifier, createLlmReplyGenerator } from './index';
 
-// ── Persona registry ─────────────────────────────────────────────────
+// ── Persona prompts ────────────────────────────────────────────────
 
 const BUYER_PROMPT = `You are Tifa Lockhart, a procurement manager at Shinra Manufacturing. Write a professional email reply that sounds like a real busy human — not a bot.
 
@@ -14,33 +14,31 @@ Business rules:
 - If the sender reports a problem (delay, QC failure, missing shipment): express concern, ask for specifics, request an ETA. Match their urgency level.
 - If the sender asks for a quote without specs: ask for part numbers, quantities, requirements.
 - If the sender is introducing themselves or offering services: be polite but brief — 1-2 sentences. Don't commit.
-- VARY your style: some replies are one-line ("Got it. Ship Friday."), others are 2-4 sentences with follow-up questions. Don't always say "thank you" or "best regards." Busy professionals write short, direct emails.
-- NEVER echo back what the sender just told you. If they said "PO #1234 ships Friday," don't reply "Thanks for confirming PO #1234 ships Friday." Instead, add something new: a question, a related update, or a next-step. If you have nothing new, keep it to one word: "Noted."
+- VARY your style: some replies are one-line ("Got it. Ship Friday."), others are 2-4 sentences with follow-up questions. Don't always say "thank you" or "best regards."
+- NEVER echo back what the sender just told you. Add something new or keep it to one word.
 - Match the sender's tone — casual emails get casual replies.
 - Sign as Tifa.`;
 
-const SUPPLIER_PROMPT = `You are a supplier responding to Tifa Lockhart, a buyer at Shinra Manufacturing. Determine your identity from the email thread context (which company you represent, what you're supplying).
+const SUPPLIER_PROMPT = `You are a supplier responding to Tifa Lockhart, a buyer at Shinra Manufacturing. Determine your identity from the email thread context.
 
 Adapt your reply like a real busy professional — not a bot:
-- If Tifa asks about a PO or shipment: provide a status update with specific details from the conversation. Some replies are terse ("On track. Ships Friday."), others more detailed. Don't always use the same template.
-- If Tifa is upset: apologize, explain the reason (use realistic issues like material shortage, QC failure, logistics delay), and offer a concrete solution. Vary severity — some problems are minor, others serious.
-- If Tifa asks for specifics: provide them. If you genuinely don't know, say you'll check — don't invent things.
-- Vary your closings: sometimes sign with your name and company, sometimes just your name, sometimes no closing at all (just the message). Busy people skip formalities.
-- Match Tifa's rhythm: if she's terse, be terse. If she's formal, be formal. Read the thread history.
-- NEVER echo back what Tifa just said. Don't say "Thanks for your reply about PO #1234." Add new information or ask a question. If the conversation is going in circles, end the thread with a brief wrap-up.
-- NEVER repeat phrases across threads. Vary sentence structure, greetings, and level of detail.`;
+- If Tifa asks about a PO or shipment: provide a status update with specific details. Some replies terse ("On track. Ships Friday."), others detailed.
+- If Tifa is upset: apologize, explain the reason (material shortage, QC failure, logistics), offer a concrete solution. Vary severity.
+- If Tifa asks for specifics: provide them. If you don't know, say you'll check — don't invent.
+- Vary closings: sometimes sign with name and company, sometimes just your name, sometimes no closing.
+- Match Tifa's rhythm: if she's terse, be terse. If she's formal, be formal.
+- NEVER echo back what Tifa just said. Add new information or ask a question.
+- NEVER repeat phrases across threads. Vary sentence structure, greetings, and detail.`;
 
-// ── CLI ──────────────────────────────────────────────────────────────
+// ── CLI ──────────────────────────────────────────────────────────
 
 const personaId = process.argv[2] || 'buyer';
-
 const dbPath = path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/vellum.db');
 const db = new BetterSqlite3(dbPath, { readonly: true });
 const grants = db.prepare('SELECT grant_id, email, mailbox_type FROM grants').all() as Array<{ grant_id: string; email: string; mailbox_type: string }>;
 db.close();
 
 let persona: { grantId: string; email: string; name: string; prompt: string; temp: number };
-
 const buyer = grants.find(g => g.mailbox_type === 'buyer_inbox');
 const supplier = grants.find(g => g.mailbox_type === 'other');
 
@@ -50,19 +48,14 @@ if (personaId === 'buyer' && buyer) {
   persona = { grantId: supplier.grant_id, email: supplier.email, name: 'Cloud Strife (Supplier)', prompt: SUPPLIER_PROMPT, temp: 0.7 };
 } else {
   console.error(`Unknown or unconfigured persona: "${personaId}".`);
-  console.error('Available: buyer (buyer_inbox), cloud (other). Configure types via http://localhost:3000');
   process.exit(1);
 }
 
-// ── Agent setup ──────────────────────────────────────────────────────
+// ── Agent setup ──────────────────────────────────────────────────
 
 const apiKey = process.env.ANTHROPIC_API_KEY || '';
 const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.deepseek.com/anthropic';
 const model = 'deepseek-v4-flash';
-
-const nylas = createNylasClient();
-const draftStore = createMemoryDraftStore();
-
 const DRY_RUN = process.env.DRY_RUN === '1';
 const BASE_POLL_SECONDS = parseInt(process.env.AGENT_POLL_SECONDS || '20', 10);
 let currentPollSeconds = BASE_POLL_SECONDS;
@@ -70,9 +63,8 @@ const MAX_POLL_SECONDS = 60;
 const processedIds = new Set<string>();
 let autoCount = 0, ignoreCount = 0, draftCount = 0;
 
-console.log(`🤖 ${persona.name} daemon — ${persona.email} base=${BASE_POLL_SECONDS}s  temp=${persona.temp}  ${DRY_RUN ? 'DRY RUN' : 'LIVE'}\n`);
-
-// Dry-run: skip actual sending but still classify + generate
+const nylas = createNylasClient();
+const draftStore = createMemoryDraftStore();
 const agent = createAgent({
   nylasClient: DRY_RUN ? undefined : nylas,
   grantId: DRY_RUN ? undefined : persona.grantId,
@@ -81,6 +73,8 @@ const agent = createAgent({
   draftStore,
   autoReplyAll: true,
 });
+
+console.log(`🤖 ${persona.name} daemon — ${persona.email} poll=${BASE_POLL_SECONDS}s temp=${persona.temp} ${DRY_RUN ? 'DRY RUN' : 'LIVE'}\n`);
 
 async function tick() {
   try {
@@ -92,22 +86,15 @@ async function tick() {
       if (email.sender.email === persona!.email) continue;
       if (email.subject.toLowerCase().includes('delivery status')) continue;
       processedIds.add(email.id);
-
       const result = await agent.process(email);
       const t = result.action.type;
       if (t === 'auto_replied' || t === 'not_sent') autoCount++;
       else if (t === 'ignored') ignoreCount++;
       else draftCount++;
-
       const icon = t === 'auto_replied' ? '✅' : t === 'ignored' ? '🗑️' : '📝';
-      const from = email.sender.name || email.sender.email;
-      console.log(`${icon} [${t}] ${from.slice(0, 20)} → "${email.subject.slice(0, 60)}"`);
+      console.log(`${icon} [${t}] ${(email.sender.name||email.sender.email).slice(0,20)} → "${email.subject.slice(0,60)}"`);
     }
-
-    // Success — gradually speed back up
-    if (currentPollSeconds > BASE_POLL_SECONDS) {
-      currentPollSeconds = Math.max(BASE_POLL_SECONDS, currentPollSeconds - 5);
-    }
+    if (currentPollSeconds > BASE_POLL_SECONDS) currentPollSeconds = Math.max(BASE_POLL_SECONDS, currentPollSeconds - 5);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (/429|rate limit|activity limit|too many|throttl/i.test(msg)) {
@@ -117,138 +104,102 @@ async function tick() {
       console.error('  ⚠', msg);
     }
   }
-  // Re-schedule with updated interval
   clearTimeout(timer);
   timer = setTimeout(tick, currentPollSeconds * 1000);
 }
 
-let timer = setTimeout(tick, 1000); // start in 1s
+let timer = setTimeout(tick, 1000);
 
-// ── Proactive mode (Cloud → Tifa random initiating emails) ──────────
+// ── Proactive mode ────────────────────────────────────────────────
+// Tifa(buyer) → Cloud: PO emails + PDF attachments
+// Cloud(supplier) → Tifa: irrelevant emails (spam, wrong person, marketing)
 
-const PROACTIVE_INTERVAL = parseInt(process.env.PROACTIVE_INTERVAL || '0', 10); // seconds, 0=off
+const PROACTIVE_INTERVAL = parseInt(process.env.PROACTIVE_INTERVAL || '0', 10);
+const PROACTIVE_MAX = parseInt(process.env.PROACTIVE_MAX || '0', 10);
 
-const PROACTIVE_MAX = parseInt(process.env.PROACTIVE_MAX || '0', 10); // max threads, 0=unlimited
+if (PROACTIVE_INTERVAL > 0) {
+  const isBuyer = personaId === 'buyer';
+  const targetInfo = isBuyer
+    ? grants.find(g => g.mailbox_type === 'other')      // Tifa sends to Cloud
+    : grants.find(g => g.mailbox_type === 'buyer_inbox');  // Cloud sends to Tifa
 
-if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
-  const buyerInfo = grants.find(g => g.mailbox_type === 'buyer_inbox');
-  let proactiveSent = 0;
-  if (!buyerInfo) {
-    console.error('PROACTIVE mode requires a buyer_inbox grant. Skipping.');
+  if (!targetInfo) {
+    console.error('PROACTIVE: no target grant found.');
   } else {
-    // Weighted topics — 2:3:5 clean:exception:irrelevant for realistic inbox
-    const topics: Array<{ subject: string; weight: number }> = [
-      // Clean (20%) — PO accepted, no issues, smooth transaction
-      { subject: 'PO #${po} — Confirmed, ETA ${eta}', weight: 10 },
-      { subject: 'Re: PO #${po} — Shipment on Schedule', weight: 10 },
-      // Exception (30%) — supplier can't fulfill, delays, back-and-forth
-      { subject: 'URGENT: PO #${po} — Material Shortage, Revised ETA ${eta}', weight: 8 },
-      { subject: 'Re: PO #${po} — Unable to Fulfill at Quoted Price', weight: 8 },
-      { subject: 'PO #${po} — Partial Shipment Due to QC Hold', weight: 7 },
-      { subject: 'Re: PO #${po} — Delay Notice, Supplier Backlog', weight: 7 },
-      // Irrelevant (50%) — spam, wrong person, marketing, HR, garbage
-      { subject: '🔥 ONE-TIME OFFER — 50% Off Industrial Parts!!!', weight: 4 },
-      { subject: 'Reminder: Annual HR Compliance Training Due', weight: 4 },
-      { subject: 'Is this the Accounting Department?', weight: 4 },
-      { subject: 'New Product Line — Spring 2026 Catalog Now Available', weight: 4 },
-      { subject: 'Re: Your LinkedIn Profile Was Viewed 12 Times This Week', weight: 4 },
-      { subject: 'Fwd: Need Volunteers for the Company Picnic', weight: 4 },
-      { subject: 'Office Supplies Order — Please Approve Stationery Request', weight: 4 },
-      { subject: 'IMPORTANT: Building Fire Drill This Thursday', weight: 4 },
-      { subject: 'YOU WON! Claim Your Free Industrial Tools Bundle', weight: 4 },
-      { subject: 'Quick Question — Does Anyone Have Ray\'s New Email?', weight: 4 },
-      { subject: 'Newsletter: Q3 Manufacturing Trends & Insights', weight: 4 },
-      { subject: 'Invoice #${inv} — Payment Confirmation (Auto-Generated)', weight: 4 },
+    const topics: Array<{ subject: string; weight: number }> = isBuyer ? [
+      { subject: 'Purchase Order ${po} — ${product}', weight: 20 },
+      { subject: 'URGENT: Missing Shipment — PO ${po}', weight: 10 },
+      { subject: 'Re: PO ${po} — Delivery Delay, Need Revised ETA', weight: 10 },
+    ] : [
+      { subject: '🔥 ONE-TIME OFFER — 50% Off Industrial Parts!!!', weight: 10 },
+      { subject: 'Reminder: Annual HR Compliance Training Due', weight: 10 },
+      { subject: 'Is this the Accounting Department?', weight: 10 },
+      { subject: 'New Product Line — Spring 2026 Catalog Now Available', weight: 10 },
+      { subject: 'Re: Your LinkedIn Profile Was Viewed 12 Times This Week', weight: 10 },
+      { subject: 'Fwd: Need Volunteers for the Company Picnic', weight: 10 },
+      { subject: 'Office Supplies Order — Please Approve Stationery Request', weight: 10 },
+      { subject: 'YOU WON! Claim Your Free Industrial Tools Bundle', weight: 10 },
     ];
-    const totalWeight = topics.reduce((s, t) => s + t.weight, 0);
 
+    const totalWeight = topics.reduce((s, t) => s + t.weight, 0);
     const suppliers = [
       { name: 'Sarah', company: 'Acme Industrial Supply', personality: 'efficient and friendly' },
       { name: 'Cloud Strife', company: 'Nibelheim Precision Parts', personality: 'detail-oriented and formal' },
       { name: 'Marco', company: 'Zenith Parts Co.', personality: 'casual and salesy' },
       { name: 'Ray', company: 'Midgar Component Supply', personality: 'terse and technical' },
-      { name: 'Judy', company: 'Corellia Precision Ltd', personality: 'warm and relationship-focused' },
-      { name: 'Biggs', company: 'Avalanche Industrial', personality: 'blunt and no-nonsense' },
     ];
 
     let proactiveTimer: ReturnType<typeof setInterval>;
+    let proactiveSent = 0;
     function r(n: number) { return Math.floor(Math.random() * n); }
-    function weightedPick<T extends { weight: number }>(arr: T[]): T {
-      let n = r(totalWeight);
-      for (const item of arr) { n -= item.weight; if (n < 0) return item; }
-      return arr[0];
-    }
 
     async function proactiveSend() {
-      if (PROACTIVE_MAX > 0 && proactiveSent >= PROACTIVE_MAX) {
-        clearInterval(proactiveTimer);
-        return;
-      }
+      if (PROACTIVE_MAX > 0 && proactiveSent >= PROACTIVE_MAX) { clearInterval(proactiveTimer); return; }
       proactiveSent++;
-      const topic = weightedPick(topics);
+      const topic = topics[r(topics.length)]; // uniform random pick
       const sup = suppliers[r(suppliers.length)];
-      const po = `PO-2026-${String(r(9000) + 1000)}`;
-      const inv = `INV-${String(r(9000) + 1000)}`;
-      const eta = new Date(Date.now() + (r(14)+1)*86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const qty = [50, 100, 200, 300, 500, 750, 1000][r(7)];
-      const products = ['Precision Bearings ABEC-7', '6205-2RS Ball Bearings', 'Ceramic Hybrid Bearings', 'Tapered Roller Bearings', 'Stainless Steel Bearings'];
+      const po = `PO-2026-${String(r(9000)+1000)}`;
+      const eta = new Date(Date.now()+(r(14)+1)*86400000).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      const qty = [100,200,300,500,750][r(5)];
+      const products = ['Precision Bearings ABEC-7','6205-2RS Ball Bearings','Ceramic Hybrid Bearings','Tapered Roller Bearings'];
       const product = products[r(products.length)];
-      const issues = ['raceway roundness out of ABEC-7 spec on ~20% of batch', 'bearing noise level exceeding 32dB threshold', 'inner ring hardness testing below spec', 'surface finish roughness on outer diameter', 'cage misalignment in assembly'];
+      const vars: Record<string,string> = { po, eta, qty: String(qty), product };
+      const subject = topic.subject.replace(/\$\{(\w+)\}/g, (_,k) => vars[k]??'');
 
-      // Fill template vars
-      const vars: Record<string,string> = { po, inv, eta, qty: String(qty), product, supplier: sup.name, company: sup.company, issue: issues[r(issues.length)] };
-      const subject = topic.subject.replace(/\$\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+      // Buyer PO emails get PDF attachments
+      let attachments: Array<{filename:string;contentType:string;content:Buffer}> = [];
+      if (isBuyer && !DRY_RUN) {
+        const pdfText = `PURCHASE ORDER\nPO: ${po}\nProduct: ${product}\nQty: ${qty} units\nETA: ${eta}`;
+        attachments = [{filename:`${po}.pdf`,contentType:'application/pdf',content:Buffer.from(pdfText,'utf-8')}];
+      }
 
-      // Use LLM to generate email body matching the topic type
-      const isIrrelevant = /OFF|Training|Accounting|Catalog|LinkedIn|Picnic|Office Supplies|Fire Drill|WON|Ray's|Newsletter|Auto-Generated/i.test(topic.subject);
-      const bodyPrompt = isIrrelevant
-        ? `Write a ONE-SENTENCE email. Subject: "${topic.subject}"
-
-Make it sound real — like an actual marketing email, HR announcement, misdirected question, or newsletter. Include realistic details (dates, names, links). Don't address Tifa by name — this is a broadcast or misdirected email. Return ONLY the body text.`
-        : `You are ${sup.name} at ${sup.company}. You are ${sup.personality}.
-
-Write a ONE-SENTENCE email to Tifa Lockhart (buyer at Shinra Manufacturing). Subject: "${topic.subject}"
-
-Context: ${topic.subject.includes('URGENT') || topic.subject.includes('Delay') || topic.subject.includes('Shortage') || topic.subject.includes('Unable') || topic.subject.includes('Partial') ? 'This is an EXCEPTION — something went wrong. Explain the problem honestly. Vary the severity per email — some are minor hiccups, others are serious issues.' : 'This is a CLEAN transaction — everything is on track. Be brief and positive.'}
-
-Rules:
-- Vary greeting (sometimes "Hi Tifa", "Tifa —", "Dear Tifa", or just jump in).
-- Vary closing (sometimes "-${sup.name}", "Thanks, ${sup.name}", "Best, ${sup.name}", just your name).
-- Personality: ${sup.personality}.
-- Sound like a real person, not a template. Return ONLY the body text.`;
+      const bodyPrompt = isBuyer
+        ? `You are Tifa Lockhart, procurement manager at Shinra Manufacturing. Send a PO email to ${sup.name} at ${sup.company}. Subject: "${subject}". Reference PO number, quantity, product. Mention a PDF is attached. Be professional. Return ONLY the body text.`
+        : `Write a ONE-SENTENCE email. Subject: "${subject}". Make it sound real — like a marketing email, HR announcement, or misdirected question. Don't address Tifa by name. Return ONLY the body text.`;
 
       let body: string;
       try {
         const Anthropic = (await import('@anthropic-ai/sdk')).default;
         const c = new Anthropic({ apiKey, baseURL: baseUrl });
-        const resp = await c.messages.create({
-          model, max_tokens: 200, temperature: 0.9,
-          messages: [{ role: 'user', content: bodyPrompt }],
-        });
-        const tb = resp.content.find((b: any) => b.type === 'text') ?? resp.content[0];
-        body = (tb as any).text?.trim() || `${sup.name} @ ${sup.company}: ${topic.subject}`;
-      } catch {
-        body = `${sup.name} at ${sup.company} — ${subject}`;
-      }
+        const resp = await c.messages.create({model,max_tokens:200,temperature:0.9,messages:[{role:'user',content:bodyPrompt}]});
+        const tb = resp.content.find((b:any)=>b.type==='text')??resp.content[0];
+        body = (tb as any).text?.trim() || subject;
+      } catch { body = subject; }
+
       if (DRY_RUN) {
-        console.log(`📤 [DRY RUN] ${sup.name} → "${subject.slice(0, 50)}"`);
+        console.log(`📤 [DRY RUN] ${persona.name} → "${subject.slice(0,50)}"${attachments.length?' +PDF':''}`);
       } else {
         try {
-          const r = await nylas.sendMessage(persona.grantId, buyerInfo!.email, subject, body);
-          console.log(`📤 [proactive] ${sup.name} → ${subject.slice(0, 50)} (msgId: ${r.messageId.slice(0, 12)}...)`);
-        } catch (e: any) {
-          const em = e?.message || String(e);
-          if (/429|rate limit|activity limit|too many|throttl/i.test(em)) {
-            console.warn('  ⏳ Proactive rate limited — backing off...');
-          } else {
-            console.error('  ⚠ proactive:', em);
-          }
+          const r = await nylas.sendMessage(persona.grantId, targetInfo!.email, subject, body, attachments);
+          console.log(`📤 [pro] ${persona.name} → ${subject.slice(0,50)} (${r.messageId.slice(0,12)}...)`);
+        } catch(e:any){
+          if(/429|rate limit|activity limit|too many|throttl/i.test(e?.message||'')) console.warn('  ⏳ Proactive rate limited');
+          else console.error('  ⚠ proactive:',e?.message);
         }
       }
     }
 
-    const maxLabel = PROACTIVE_MAX > 0 ? ` (max ${PROACTIVE_MAX} threads)` : '';
-    console.log(`📤 Proactive mode: Cloud → Tifa every ${PROACTIVE_INTERVAL}s${maxLabel}\n`);
+    console.log(`📤 Proactive: ${persona.name} → ${targetInfo.email} every ${PROACTIVE_INTERVAL}s (max ${PROACTIVE_MAX})\n`);
     proactiveSend();
     proactiveTimer = setInterval(proactiveSend, PROACTIVE_INTERVAL * 1000);
   }
