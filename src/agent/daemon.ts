@@ -70,7 +70,7 @@ const agent = createAgent({
   autoReplyAll: true,
 });
 
-const BASE_POLL_SECONDS = parseInt(process.env.AGENT_POLL_SECONDS || '5', 10);
+const BASE_POLL_SECONDS = parseInt(process.env.AGENT_POLL_SECONDS || '20', 10);
 let currentPollSeconds = BASE_POLL_SECONDS;
 const MAX_POLL_SECONDS = 60;
 const processedIds = new Set<string>();
@@ -81,9 +81,7 @@ console.log(`🤖 ${persona.name} daemon — ${persona.email} base=${BASE_POLL_S
 async function tick() {
   try {
     const since = Math.floor(Date.now() / 1000) - currentPollSeconds * 3;
-    // When backed off, only process 1 email per tick to stay under rate limit
-    const batchSize = currentPollSeconds > BASE_POLL_SECONDS ? 1 : 3;
-    const page = await nylas.listMessages(persona!.grantId, { sinceTimestamp: since, limit: batchSize, unreadOnly: true });
+    const page = await nylas.listMessages(persona!.grantId, { sinceTimestamp: since, limit: 1, unreadOnly: true });
 
     for (const email of page.messages) {
       if (processedIds.has(email.id)) continue;
@@ -182,13 +180,6 @@ if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
         clearInterval(proactiveTimer);
         return;
       }
-      // Check if Cloud has unread replies to handle first — reply priority > new thread
-      try {
-        const unread = await nylas.listMessages(persona!.grantId, { sinceTimestamp: Math.floor(Date.now()/1000)-PROACTIVE_INTERVAL, limit: 3, unreadOnly: true });
-        const fromTifa = unread.messages.filter(m =>
-          m.sender.email === buyerInfo?.email || m.subject.toLowerCase().includes('re:'));
-        if (fromTifa.length > 0) return; // skip — reply to Tifa first
-      } catch {}
       proactiveSent++;
       const topic = weightedPick(topics);
       const sup = suppliers[r(suppliers.length)];
