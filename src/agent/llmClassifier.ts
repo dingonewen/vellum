@@ -52,19 +52,21 @@ EMAIL:
 Subject: ${subject}
 Snippet: ${body}`;
 
-      const response = await client.messages.create({
-        model: model ?? 'deepseek-v4-flash',
-        max_tokens: 512,
-        temperature: 0,
-        messages: [{ role: 'user', content: prompt }],
-      });
+      let text = '';
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const response = await client.messages.create({
+          model: model ?? 'deepseek-v4-flash',
+          max_tokens: 512,
+          temperature: 0,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        const textBlock = response.content.find(b => b.type === 'text')
+          ?? response.content.find(b => b.type === 'thinking')
+          ?? response.content[0];
+        text = (textBlock as { text: string }).text?.trim() ?? '';
+        if (text.length > 0) break; // got a response, stop retrying
+      }
 
-      // DeepSeek may return a "thinking" block — look for text, fall back to any block
-      const textBlock = response.content.find(b => b.type === 'text')
-        ?? response.content.find(b => b.type === 'thinking')
-        ?? response.content[0];
-      const text = (textBlock as { text: string }).text?.trim() ?? '';
-      // Strip markdown code fences if present
       const json = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
 
       try {
@@ -73,18 +75,10 @@ Snippet: ${body}`;
           confidence: 'high' | 'medium' | 'low';
           reason: string;
         };
-
-        // Normalize "draft" → "draft_for_manager"
-        const action = parsed.action === 'draft' ? 'draft_for_manager' : parsed.action;
-
-        return {
-          action,
-          confidence: parsed.confidence,
-          reason: parsed.reason,
-        };
+        const act = parsed.action === 'draft' ? 'draft_for_manager' : parsed.action;
+        return { action: act, confidence: parsed.confidence, reason: parsed.reason };
       } catch {
-        // If JSON parse fails, fall back to draft for safety
-        console.warn(`  ⚠ LLM classifier returned unparseable response: "${text.slice(0, 100)}". Falling back to draft.`);
+        console.warn(`  ⚠ LLM classifier unparseable: "${text.slice(0, 60)}" → draft`);
         return {
           action: 'draft_for_manager',
           confidence: 'low',

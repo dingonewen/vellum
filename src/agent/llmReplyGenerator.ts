@@ -58,25 +58,27 @@ ${isDraft ? 'This is a DRAFT for manager review. Be conservative.' : 'This is an
 Return ONLY valid JSON — no markdown, no explanation:
 {"subject":"Re: ${email.subject.replace(/^Re:\s*/i, '')}","body":"<p>${prefix}HTML reply here</p>"}`;
 
-      const response = await client.messages.create({
-        model: model ?? 'deepseek-v4-flash',
-        max_tokens: 1024,
-        temperature: temp,
-        messages: [{ role: 'user', content: prompt }],
-      });
+      let text = '';
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const response = await client.messages.create({
+          model: model ?? 'deepseek-v4-flash',
+          max_tokens: 1024,
+          temperature: temp,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        const textBlock = response.content.find(b => b.type === 'text')
+          ?? response.content.find(b => b.type === 'thinking')
+          ?? response.content[0];
+        text = (textBlock as { text: string }).text?.trim() ?? '';
+        if (text.length > 0) break;
+      }
 
-      // DeepSeek may return a "thinking" block — look for text, fall back to any block
-      const textBlock = response.content.find(b => b.type === 'text')
-        ?? response.content.find(b => b.type === 'thinking')
-        ?? response.content[0];
-      const text = (textBlock as { text: string }).text?.trim() ?? '';
       const json = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
 
       try {
         return JSON.parse(json) as GeneratedReply;
       } catch {
-        // Fallback: wrap the raw text in a basic HTML paragraph
-        console.warn('  ⚠ LLM reply generator returned unparseable response. Using raw text.');
+        console.warn('  ⚠ LLM reply unparseable. Using raw text.');
         return {
           subject,
           body: `<p>${text.replace(/\n/g, '<br/>')}</p>`,

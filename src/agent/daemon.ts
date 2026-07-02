@@ -226,7 +226,7 @@ Rules:
         const tb = resp.content.find((b: any) => b.type === 'text') ?? resp.content[0];
         body = (tb as any).text?.trim() || `${sup.name} @ ${sup.company}: ${topic.subject}`;
       } catch {
-        body = `${sup.name} at ${sup.company} — ${topic.subject}`;
+        body = `${sup.name} at ${sup.company} — ${subject}`;
       }
       if (DRY_RUN) {
         console.log(`📤 [DRY RUN] ${sup.name} → "${subject.slice(0, 50)}"`);
