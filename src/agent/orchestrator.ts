@@ -48,6 +48,8 @@ export interface AgentOptions {
   classifier?: Classifier;
   /** Reply generator (defaults to rule-based). */
   replyGenerator?: ReplyGenerator;
+  /** Override all draft_for_manager → auto_reply (dual-agent training mode). */
+  autoReplyAll?: boolean;
 }
 
 /**
@@ -70,7 +72,12 @@ export function createAgent(options: AgentOptions): Agent {
 
   return {
     async process(email: EmailMessage): Promise<AgentResult> {
-      const classification = await classifier.classify(email);
+      let classification = await classifier.classify(email);
+
+      // Override draft → auto_reply in training mode
+      if (options.autoReplyAll && classification.action === 'draft_for_manager') {
+        classification = { ...classification, action: 'auto_reply' };
+      }
 
       // Ignore: spam, newsletters, wrong person
       if (classification.action === 'ignore') {

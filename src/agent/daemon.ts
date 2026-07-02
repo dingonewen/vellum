@@ -67,6 +67,7 @@ const agent = createAgent({
   classifier: createLlmClassifier(apiKey, baseUrl, model),
   replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model, persona.prompt, persona.temp),
   draftStore,
+  autoReplyAll: true,
 });
 
 const POLL_SECONDS = parseInt(process.env.AGENT_POLL_SECONDS || '5', 10);
@@ -98,7 +99,11 @@ async function tick() {
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (!msg.includes('429') && !msg.includes('timeout')) console.error('  ⚠', msg);
+    if (/429|rate limit|activity limit|too many|throttl/i.test(msg)) {
+      console.warn('  ⏳ Rate limited — backing off...');
+    } else if (!msg.includes('timeout')) {
+      console.error('  ⚠', msg);
+    }
   }
 }
 
@@ -170,7 +175,14 @@ if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
       try {
         const r = await nylas.sendMessage(persona.grantId, buyerInfo!.email, subject, body);
         console.log(`📤 [proactive] ${sup.name} → ${subject.slice(0, 50)} (msgId: ${r.messageId.slice(0, 12)}...)`);
-      } catch (e: any) { if (!e.message?.includes('429')) console.error('  ⚠ proactive:', e.message); }
+      } catch (e: any) {
+        const em = e?.message || String(e);
+        if (/429|rate limit|activity limit|too many|throttl/i.test(em)) {
+          console.warn('  ⏳ Proactive rate limited — backing off...');
+        } else {
+          console.error('  ⚠ proactive:', em);
+        }
+      }
     }
 
     const maxLabel = PROACTIVE_MAX > 0 ? ` (max ${PROACTIVE_MAX} threads)` : '';
