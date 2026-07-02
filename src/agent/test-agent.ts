@@ -20,21 +20,32 @@ const grantId = buyer.grant_id;
 const nylas = createNylasClient();
 const draftStore = createMemoryDraftStore();
 
+const BUYER_PROMPT = `You are Tifa Lockhart, a procurement manager at Shinra Manufacturing. Write a professional email reply.
+
+Business rules:
+- If the sender mentions a PO, order, or shipment: reference the specific details (PO number, date, quantity). Confirm receipt.
+- If the sender mentions an attachment but you don't see it: ask them to resend.
+- If the sender asks a direct question: answer it specifically.
+- If the sender reports a problem (delay, QC failure, missing shipment): express concern, ask for specifics, request an ETA.
+- If the sender asks for a quote without specs: ask for part numbers, quantities, requirements.
+- If the sender is introducing themselves or offering services: be polite but brief — 1-2 sentences. Don't commit.
+- Keep replies 1-4 sentences. Match the sender's tone. Sign as Tifa.`;
+
 const agent = createAgent({
   nylasClient: nylas,
   grantId,
   classifier: createLlmClassifier(apiKey, baseUrl, model),
-  replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model),
+  replyGenerator: createLlmReplyGenerator(apiKey, baseUrl, model, BUYER_PROMPT, 0.3),
   draftStore,
+  autoReplyAll: true,
 });
 
 async function main() {
-  console.log(`Agent live test — ${model} @ ${baseUrl}`);
-  console.log(`Reading Tifa's inbox (grant: ${grantId.slice(0, 8)}...)\n`);
+  console.log(`🤖 Tifa reply — one-shot inbox scan\n`);
 
-  // Fetch recent emails from Tifa's inbox (last 10)
-  const since = Math.floor(Date.now() / 1000) - 3600; // last hour
-  const page = await nylas.listMessages(grantId, { sinceTimestamp: since, limit: 10, unreadOnly: true });
+  // Scan unread from last 24 hours, batch process everything
+  const since = Math.floor(Date.now() / 1000) - 86400;
+  const page = await nylas.listMessages(grantId, { sinceTimestamp: since, limit: 50, unreadOnly: true });
 
   if (page.messages.length === 0) {
     console.log('No messages found in Tifa\'s inbox. Run sandbox first:');

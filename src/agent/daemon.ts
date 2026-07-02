@@ -81,7 +81,9 @@ console.log(`🤖 ${persona.name} daemon — ${persona.email} base=${BASE_POLL_S
 async function tick() {
   try {
     const since = Math.floor(Date.now() / 1000) - currentPollSeconds * 3;
-    const page = await nylas.listMessages(persona!.grantId, { sinceTimestamp: since, limit: 3, unreadOnly: true });
+    // When backed off, only process 1 email per tick to stay under rate limit
+    const batchSize = currentPollSeconds > BASE_POLL_SECONDS ? 1 : 3;
+    const page = await nylas.listMessages(persona!.grantId, { sinceTimestamp: since, limit: batchSize, unreadOnly: true });
 
     for (const email of page.messages) {
       if (processedIds.has(email.id)) continue;
@@ -132,25 +134,48 @@ if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
   if (!buyerInfo) {
     console.error('PROACTIVE mode requires a buyer_inbox grant. Skipping.');
   } else {
-    const scenarios = [
-      { subject: 'PO #${po} — Confirmed, ETA ${eta}',        body: 'Hi Tifa, PO #${po} for ${qty} units of ${product} is confirmed. Delivery by ${eta}. — ${supplier} at ${company}' },
-      { subject: 'PO #${po} — Shipping Update',              body: 'Tifa, PO #${po} shipped this morning. Tracking: ${tracking}. ETA ${eta}. — ${supplier}, ${company}' },
-      { subject: 'URGENT: PO #${po} — Delay Notice',         body: 'Tifa, we hit a delay on PO #${po}. A QC check flagged ${issue}. Revised ETA: ${eta}. Apologies — ${supplier}' },
-      { subject: 'Invoice #${inv} for PO #${po}',            body: 'Dear Tifa, attached is invoice #${inv} for PO #${po} (${qty} × ${product}). Total: ${total}. Net 30. — ${supplier}' },
-      { subject: 'New pricing for ${product}',                body: 'Hi Tifa, just a heads-up — ${product} pricing will increase ~${pct} starting next month due to raw material costs. Lock in current pricing if you order by ${eta}. — ${supplier}' },
-      { subject: 'Quick question — PO #${po}',               body: 'Tifa, quick question about PO #${po} — do you want the standard packaging or export-grade crating? Please confirm by ${eta}. — ${supplier}' },
+    // Weighted topics — 1:2:7 clean:exception:irrelevant for realistic inbox
+    const topics: Array<{ subject: string; weight: number }> = [
+      // Clean (10%) — PO accepted, no issues, smooth transaction
+      { subject: 'PO #${po} — Confirmed, ETA ${eta}', weight: 5 },
+      { subject: 'Re: PO #${po} — Shipment on Schedule', weight: 5 },
+      // Exception (20%) — supplier can't fulfill, delays, back-and-forth
+      { subject: 'URGENT: PO #${po} — Material Shortage, Revised ETA ${eta}', weight: 5 },
+      { subject: 'Re: PO #${po} — Unable to Fulfill at Quoted Price', weight: 5 },
+      { subject: 'PO #${po} — Partial Shipment Due to QC Hold', weight: 5 },
+      { subject: 'Re: PO #${po} — Delay Notice, Supplier Backlog', weight: 5 },
+      // Irrelevant (70%) — spam, wrong person, marketing, HR, garbage
+      { subject: '🔥 ONE-TIME OFFER — 50% Off Industrial Parts!!!', weight: 8 },
+      { subject: 'Reminder: Annual HR Compliance Training Due', weight: 7 },
+      { subject: 'Is this the Accounting Department?', weight: 7 },
+      { subject: 'New Product Line — Spring 2026 Catalog Now Available', weight: 7 },
+      { subject: 'Re: Your LinkedIn Profile Was Viewed 12 Times This Week', weight: 6 },
+      { subject: 'Fwd: Need Volunteers for the Company Picnic', weight: 5 },
+      { subject: 'Office Supplies Order — Please Approve Stationery Request', weight: 5 },
+      { subject: 'IMPORTANT: Building Fire Drill This Thursday', weight: 5 },
+      { subject: 'YOU WON! Claim Your Free Industrial Tools Bundle', weight: 5 },
+      { subject: 'Quick Question — Does Anyone Have Ray\'s New Email?', weight: 5 },
+      { subject: 'Newsletter: Q3 Manufacturing Trends & Insights', weight: 5 },
+      { subject: 'Invoice #${inv} — Payment Confirmation (Auto-Generated)', weight: 5 },
     ];
+    const totalWeight = topics.reduce((s, t) => s + t.weight, 0);
 
     const suppliers = [
-      { name: 'Sarah', company: 'Acme Industrial Supply' },
-      { name: 'Cloud Strife', company: 'Nibelheim Precision Parts' },
-      { name: 'Marco', company: 'Zenith Parts Co.' },
-      { name: 'Ray', company: 'Midgar Component Supply' },
+      { name: 'Sarah', company: 'Acme Industrial Supply', personality: 'efficient and friendly' },
+      { name: 'Cloud Strife', company: 'Nibelheim Precision Parts', personality: 'detail-oriented and formal' },
+      { name: 'Marco', company: 'Zenith Parts Co.', personality: 'casual and salesy' },
+      { name: 'Ray', company: 'Midgar Component Supply', personality: 'terse and technical' },
+      { name: 'Judy', company: 'Corellia Precision Ltd', personality: 'warm and relationship-focused' },
+      { name: 'Biggs', company: 'Avalanche Industrial', personality: 'blunt and no-nonsense' },
     ];
 
     let proactiveTimer: ReturnType<typeof setInterval>;
     function r(n: number) { return Math.floor(Math.random() * n); }
-    function pick<T>(arr: T[]) { return arr[r(arr.length)]; }
+    function weightedPick<T extends { weight: number }>(arr: T[]): T {
+      let n = r(totalWeight);
+      for (const item of arr) { n -= item.weight; if (n < 0) return item; }
+      return arr[0];
+    }
 
     async function proactiveSend() {
       if (PROACTIVE_MAX > 0 && proactiveSent >= PROACTIVE_MAX) {
@@ -165,23 +190,51 @@ if (PROACTIVE_INTERVAL > 0 && personaId === 'cloud') {
         if (fromTifa.length > 0) return; // skip — reply to Tifa first
       } catch {}
       proactiveSent++;
-      const s = pick(scenarios);
-      const sup = pick(suppliers);
+      const topic = weightedPick(topics);
+      const sup = suppliers[r(suppliers.length)];
       const po = `PO-2026-${String(r(9000) + 1000)}`;
       const inv = `INV-${String(r(9000) + 1000)}`;
-      const eta = new Date(Date.now() + (r(10)+3)*86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const qty = [100, 200, 300, 500, 750][r(5)];
-      const tracking = `1Z${Math.random().toString(36).slice(2, 18).toUpperCase()}`;
+      const eta = new Date(Date.now() + (r(14)+1)*86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const qty = [50, 100, 200, 300, 500, 750, 1000][r(7)];
+      const products = ['Precision Bearings ABEC-7', '6205-2RS Ball Bearings', 'Ceramic Hybrid Bearings', 'Tapered Roller Bearings', 'Stainless Steel Bearings'];
+      const product = products[r(products.length)];
+      const issues = ['raceway roundness out of ABEC-7 spec on ~20% of batch', 'bearing noise level exceeding 32dB threshold', 'inner ring hardness testing below spec', 'surface finish roughness on outer diameter', 'cage misalignment in assembly'];
 
-      const subject = s.subject.replace(/\$\{(\w+)\}/g, (_, k) => {
-        const vars: Record<string,string> = { po, inv, eta, qty: String(qty), product: 'Precision Bearings ABEC-7', supplier: sup.name, company: sup.company, tracking, issue: pick(['raceway roundness','bearing noise','material hardness']), total: `$${(qty*18.5).toLocaleString()}`, pct: pick(['5%','8%','12%']) };
-        return vars[k] ?? '';
-      });
-      const body = `[${sup.name} @ ${sup.company}]\n\n${s.body.replace(/\$\{(\w+)\}/g, (_, k) => {
-        const vars: Record<string,string> = { po, inv, eta, qty: String(qty), product: 'Precision Bearings ABEC-7', supplier: sup.name, company: sup.company, tracking, issue: pick(['raceway roundness','bearing noise','material hardness']), total: `$${(qty*18.5).toLocaleString()}`, pct: pick(['5%','8%','12%']) };
-        return vars[k] ?? '';
-      })}`;
+      // Fill template vars
+      const vars: Record<string,string> = { po, inv, eta, qty: String(qty), product, supplier: sup.name, company: sup.company, issue: issues[r(issues.length)] };
+      const subject = topic.subject.replace(/\$\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
+      // Use LLM to generate email body matching the topic type
+      const isIrrelevant = /OFF|Training|Accounting|Catalog|LinkedIn|Picnic|Office Supplies|Fire Drill|WON|Ray's|Newsletter|Auto-Generated/i.test(topic.subject);
+      const bodyPrompt = isIrrelevant
+        ? `Write a ONE-SENTENCE email. Subject: "${topic.subject}"
+
+Make it sound real — like an actual marketing email, HR announcement, misdirected question, or newsletter. Include realistic details (dates, names, links). Don't address Tifa by name — this is a broadcast or misdirected email. Return ONLY the body text.`
+        : `You are ${sup.name} at ${sup.company}. You are ${sup.personality}.
+
+Write a ONE-SENTENCE email to Tifa Lockhart (buyer at Shinra Manufacturing). Subject: "${topic.subject}"
+
+Context: ${topic.subject.includes('URGENT') || topic.subject.includes('Delay') || topic.subject.includes('Shortage') || topic.subject.includes('Unable') || topic.subject.includes('Partial') ? 'This is an EXCEPTION — something went wrong. Explain the problem honestly. Vary the severity per email — some are minor hiccups, others are serious issues.' : 'This is a CLEAN transaction — everything is on track. Be brief and positive.'}
+
+Rules:
+- Vary greeting (sometimes "Hi Tifa", "Tifa —", "Dear Tifa", or just jump in).
+- Vary closing (sometimes "-${sup.name}", "Thanks, ${sup.name}", "Best, ${sup.name}", just your name).
+- Personality: ${sup.personality}.
+- Sound like a real person, not a template. Return ONLY the body text.`;
+
+      let body: string;
+      try {
+        const Anthropic = (await import('@anthropic-ai/sdk')).default;
+        const c = new Anthropic({ apiKey, baseURL: baseUrl });
+        const resp = await c.messages.create({
+          model, max_tokens: 200, temperature: 0.9,
+          messages: [{ role: 'user', content: bodyPrompt }],
+        });
+        const tb = resp.content.find((b: any) => b.type === 'text') ?? resp.content[0];
+        body = (tb as any).text?.trim() || `${sup.name} @ ${sup.company}: ${topic.subject}`;
+      } catch {
+        body = `${sup.name} at ${sup.company} — ${topic.subject}`;
+      }
       try {
         const r = await nylas.sendMessage(persona.grantId, buyerInfo!.email, subject, body);
         console.log(`📤 [proactive] ${sup.name} → ${subject.slice(0, 50)} (msgId: ${r.messageId.slice(0, 12)}...)`);
